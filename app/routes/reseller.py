@@ -474,6 +474,10 @@ def upload_logo():
         url = upload_asset(config, file, r2_key, content_type)
     except Exception as e:
         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
+    # Same R2 key is reused on re-upload; a version suffix makes browsers and link
+    # scrapers pick up the new image instead of a cached one.
+    import time
+    url = f"{url}?v={int(time.time())}"
 
     with global_db(config) as db:
         db.execute("UPDATE stores SET logo_url=? WHERE id=?", (url, store["id"]))
