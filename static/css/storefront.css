@@ -215,3 +215,17 @@
 @media (max-width: 420px) {
   .trust-bar-inner { gap: .65rem; }
 }
+/* ── Create an Agent Account button (top of store) ───────── */
+.sf-create-agent-btn {
+  margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center; gap: .5rem;
+  padding: .65rem 1.1rem; border-radius: 999px; font-weight: 800; font-size: .85rem;
+  color: #fff; text-decoration: none;
+  background: rgba(255,255,255,.18); border: 1.5px solid rgba(255,255,255,.4);
+  backdrop-filter: blur(10px); transition: background .2s, transform .2s;
+  margin-right: 3rem; /* clear the theme toggle */
+}
+.sf-create-agent-btn:hover { background: rgba(255,255,255,.3); transform: translateY(-1px); }
+@media (max-width: 640px) {
+  .sf-hero-inner { flex-wrap: wrap; }
+  .sf-create-agent-btn { margin: .5rem 0 0; width: 100%; justify-content: center; }
+}
