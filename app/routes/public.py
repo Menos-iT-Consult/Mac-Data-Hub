@@ -5,6 +5,7 @@ from ..services.db import global_db, global_db_read, user_db
 from ..services.paystack import initialize_transaction, verify_transaction, add_paystack_charge
 from ..services.gigzhub import dispatch_bundle
 from ..services.push import broadcast_push
+from ..services.referrals import credit_referral
 
 public_bp = Blueprint("public", __name__)
 
@@ -299,6 +300,12 @@ def verify_payment():
             "UPDATE orders SET status=?, gigzhub_order_id=?, gigzhub_error=? WHERE id=?",
             (status, gigzhub_id, gigzhub_error or None, order_dict["id"])
         )
+
+        if status == "dispatched":
+            try:
+                credit_referral(config, db, order_dict)
+            except Exception:
+                pass
 
         if status == "dispatched" and order_dict["store_id"]:
             store = db.execute(

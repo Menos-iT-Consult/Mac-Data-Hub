@@ -1,5 +1,6 @@
 import re
 import uuid
+import secrets
 from flask import (Blueprint, render_template, request, redirect,
                    url_for, session, flash, current_app, jsonify)
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -9,6 +10,21 @@ from ..services.paystack import initialize_transaction
 _USERNAME_RE = re.compile(r'^[a-z0-9][a-z0-9_-]{1,28}[a-z0-9]$|^[a-z0-9]{3}$')
 
 auth_bp = Blueprint("auth", __name__)
+
+_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def _ensure_referral_code(db, user_id):
+    """Return the user's referral code, creating a unique one if missing."""
+    row = db.execute("SELECT referral_code FROM users WHERE id=?", (user_id,)).fetchone()
+    if row and row["referral_code"]:
+        return row["referral_code"]
+    while True:
+        code = "".join(secrets.choice(_CODE_ALPHABET) for _ in range(6))
+        if not db.execute("SELECT 1 FROM users WHERE referral_code=?", (code,)).fetchone():
+            break
+    db.execute("UPDATE users SET referral_code=? WHERE id=?", (code, user_id))
+    return code
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
@@ -38,11 +54,16 @@ def login():
         flash("Invalid email/username or password.", "error")
         return render_template("auth/login.html")
 
+    # Make sure this account has a referral code (older accounts won't yet)
+    with global_db(config) as db:
+        code = _ensure_referral_code(db, user["id"])
+
     session.clear()
     session["user_id"] = user["id"]
     session["role"] = "reseller"
     session["email"] = user["email"]
     session["full_name"] = user["full_name"]
+    session["referral_popup"] = code   # shown once, right after sign-in
     return redirect(url_for("reseller.dashboard"))
 
 
@@ -62,6 +83,9 @@ def apply_page():
 def register():
     if request.method == "GET":
         config = current_app.config
+        ref = request.args.get("ref", "").strip().upper()
+        if ref:
+            session["ref"] = ref[:12]
         with global_db_read(config) as db:
             fee_row  = db.execute(
                 "SELECT value FROM app_settings WHERE key='reseller_registration_fee_pesewas'"
@@ -117,12 +141,20 @@ def register():
         user_id  = str(uuid.uuid4())
         store_id = str(uuid.uuid4())
 
+        referred_by = None
+        ref_code = session.get("ref")
+        if ref_code:
+            referrer = db.execute(
+                "SELECT id FROM users WHERE referral_code=?", (ref_code,)
+            ).fetchone()
+            referred_by = referrer["id"] if referrer else None
+
         if is_free:
             # Activate immediately — no payment needed
             db.execute(
-                """INSERT INTO users (id, email, password_hash, full_name, phone, username, role, is_active)
-                   VALUES (?,?,?,?,?,?,'reseller',1)""",
-                (user_id, email, generate_password_hash(password), full_name, phone, username)
+                """INSERT INTO users (id, email, password_hash, full_name, phone, username, role, is_active, referred_by)
+                   VALUES (?,?,?,?,?,?,'reseller',1,?)""",
+                (user_id, email, generate_password_hash(password), full_name, phone, username, referred_by)
             )
             db.execute(
                 "INSERT INTO stores (id, user_id, slug, store_name) VALUES (?,?,?,?)",
@@ -134,9 +166,9 @@ def register():
         reg_id    = str(uuid.uuid4())
         reference = f"REG-{reg_id[:8].upper()}"
         db.execute(
-            """INSERT INTO users (id, email, password_hash, full_name, phone, username, role, is_active)
-               VALUES (?,?,?,?,?,?,'reseller',0)""",
-            (user_id, email, generate_password_hash(password), full_name, phone, username)
+            """INSERT INTO users (id, email, password_hash, full_name, phone, username, role, is_active, referred_by)
+               VALUES (?,?,?,?,?,?,'reseller',0,?)""",
+            (user_id, email, generate_password_hash(password), full_name, phone, username, referred_by)
         )
         db.execute(
             """INSERT INTO reseller_registrations

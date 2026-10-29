@@ -78,6 +78,9 @@ _MIGRATIONS = [
     "ALTER TABLE wallet_withdrawals ADD COLUMN fee_pesewas INTEGER NOT NULL DEFAULT 0",
     # Reseller username for login and display (unique, nullable for existing accounts)
     "ALTER TABLE users ADD COLUMN username TEXT",
+    # Referral programme: each reseller's shareable code + who referred them
+    "ALTER TABLE users ADD COLUMN referral_code TEXT",
+    "ALTER TABLE users ADD COLUMN referred_by TEXT",
 ]
 
 

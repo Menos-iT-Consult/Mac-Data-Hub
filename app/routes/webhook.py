@@ -4,6 +4,7 @@ from ..services.db import global_db, user_db
 from ..services.paystack import verify_webhook_signature
 from ..services.gigzhub import dispatch_bundle
 from ..services.push import broadcast_push
+from ..services.referrals import credit_referral
 
 webhook_bp = Blueprint("webhook", __name__)
 
@@ -103,6 +104,13 @@ def _handle_order(config, reference: str, metadata: dict):
             "UPDATE orders SET status=?, gigzhub_order_id=?, gigzhub_error=? WHERE id=?",
             (status, gigzhub_id, gigzhub_error or None, order["id"])
         )
+
+        # Referral bonus for whoever referred the buyer / store owner
+        if status == "dispatched":
+            try:
+                credit_referral(config, db, order)
+            except Exception:
+                pass
 
         # Credit reseller wallet and mirror to their personal DB
         if status == "dispatched" and order["store_id"]:

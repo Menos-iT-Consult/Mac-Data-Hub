@@ -1,0 +1,54 @@
+{# Shown once right after a reseller signs in. Needs: referral_popup_code #}
+{% if referral_popup_code %}
+<div class="ref-overlay" id="ref-overlay" role="dialog" aria-modal="true" aria-labelledby="ref-title"
+     data-code="{{ referral_popup_code }}" data-app-url="{{ config['APP_URL'].rstrip('/') }}">
+  <div class="ref-modal">
+    <div class="ref-hero">
+      <button class="ref-close" type="button" id="ref-close" aria-label="Close">&times;</button>
+      <p class="ref-eyebrow">What your friend won't show you</p>
+      <h2 id="ref-title">Get paid when your people buy data.</h2>
+      <p class="ref-sub">You're already the plug — now earn from it, automatically.</p>
+    </div>
+
+    <div class="ref-body">
+      <ol class="ref-steps">
+        <li><span>01</span>Share your code or link — drop it in your WhatsApp status.</li>
+        <li><span>02</span>They sign up with it and buy data like normal.</li>
+        <li><span>03</span>You earn 1% of every order they make for 60 days — straight to your wallet.</li>
+      </ol>
+
+      <div class="ref-table">
+        <div class="ref-table-head">What that puts in your wallet</div>
+        <div class="ref-row"><span>A friend buys GH₵100 of data</span><b>+GH₵1.00</b></div>
+        <div class="ref-row"><span>A friend buys GH₵500 over a month</span><b>+GH₵5.00</b></div>
+        <div class="ref-row"><span>10 friends buy GH₵300 each</span><b>+GH₵30.00</b></div>
+      </div>
+
+      <p class="ref-note">Earnings drop straight into your wallet balance.</p>
+
+      <div class="ref-code-box">
+        <div>
+          <div class="ref-code-label">Your code</div>
+          <div class="ref-code" id="ref-code">{{ referral_popup_code }}</div>
+        </div>
+        <button type="button" class="ref-copy" id="ref-copy">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <span id="ref-copy-text">Copy</span>
+        </button>
+      </div>
+
+      <button type="button" class="ref-share" id="ref-share">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
+        Share on WhatsApp
+      </button>
+
+      <div class="ref-actions">
+        <a href="/dashboard/referrals" class="ref-view">View my referrals</a>
+        <button type="button" class="ref-later" id="ref-later">Maybe later</button>
+      </div>
+    </div>
+  </div>
+</div>
+<link rel="stylesheet" href="/static/css/referral-popup.css" />
+<script src="{{ static_v('js/referral-popup.js') }}"></script>
+{% endif %}

@@ -52,7 +52,7 @@ def create_app():
         p: _static_hash(app, p)
         for p in [
             "js/auth.js", "js/main.js", "js/wallet.js",
-            "js/help-fab.js", "css/base.css", "css/dashboard.css",
+            "js/help-fab.js", "js/referral-popup.js", "css/base.css", "css/dashboard.css",
         ]
     }
 
@@ -74,6 +74,8 @@ def create_app():
             "announcement_text": "",
             "announcement_type": "info",
             "site_logo_url": "",
+            # One-shot: set at sign-in, cleared as soon as a page renders it
+            "referral_popup_code": session.pop("referral_popup", None) if session.get("role") == "reseller" else None,
         }
         role = session.get("role")
         try:

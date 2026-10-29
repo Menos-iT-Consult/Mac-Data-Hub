@@ -95,6 +95,16 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Referral bonuses credited to a referrer's wallet (one per order)
+CREATE TABLE IF NOT EXISTS referral_earnings (
+    id             TEXT PRIMARY KEY,
+    order_id       TEXT UNIQUE NOT NULL REFERENCES orders(id),
+    referrer_id    TEXT NOT NULL REFERENCES users(id),
+    referred_id    TEXT NOT NULL REFERENCES users(id),
+    amount_pesewas INTEGER NOT NULL,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Guest orders (store_id NULL = direct/admin store purchase)
 CREATE TABLE IF NOT EXISTS orders (
     id                  TEXT PRIMARY KEY,

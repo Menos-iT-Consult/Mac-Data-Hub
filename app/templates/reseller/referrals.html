@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}My Referrals — Mac Data Hub{% endblock %}
+{% block body_class %}dash-page{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/dashboard.css" />{% endblock %}
+
+{% block content %}
+<div class="dash-layout">
+  {% include "partials/reseller_nav.html" %}
+  <div class="dash-main">
+    <div class="dash-topbar">
+      <button class="topbar-hamburger" id="sidebar-toggle" aria-label="Open menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="topbar-title-wrap">
+        <span class="topbar-title">My Referrals</span>
+        <span class="topbar-subtitle">People who signed up with your code</span>
+      </div>
+      {% include "partials/topbar_actions.html" %}
+    </div>
+    <div class="dash-content">
+      <div class="panel">
+        <div class="panel-body" style="padding:1.2rem">
+          <p style="margin:0 0 .3rem;color:var(--text-muted)">Your code</p>
+          <p style="margin:0 0 1rem;font-size:1.6rem;font-weight:900;font-family:var(--font-mono)">{{ user['referral_code'] or '—' }}</p>
+          <p style="margin:0 0 1rem;color:var(--text-muted)">Total earned from referrals:
+            <b style="color:#00a651">GHS {{ '%.2f'|format(total_earned / 100) }}</b></p>
+          {% if referred %}
+            {% for r in referred %}
+              <div style="display:flex;justify-content:space-between;padding:.6rem 0;border-top:1px solid var(--border)">
+                <span>{{ r['full_name'] }}</span><span style="color:var(--text-muted)">Joined {{ r['created_at'][:10] }} · <b style="color:#00a651">+GHS {{ '%.2f'|format(r['earned'] / 100) }}</b></span>
+              </div>
+            {% endfor %}
+          {% else %}
+            <p style="color:var(--text-muted)">No referrals yet — share your code to get started.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -57,6 +57,25 @@ def dashboard():
                            total_orders=total_orders)
 
 
+@reseller_bp.route("/referrals")
+@reseller_required
+def referrals():
+    config = current_app.config
+    uid, user, store = _ctx(config)
+    with global_db_read(config) as db:
+        rows = db.execute(
+            """SELECT u.full_name, u.created_at,
+                      COALESCE((SELECT SUM(amount_pesewas) FROM referral_earnings re
+                                WHERE re.referred_id=u.id AND re.referrer_id=?),0) AS earned
+               FROM users u WHERE u.referred_by=? ORDER BY u.created_at DESC""",
+            (uid, uid)
+        ).fetchall()
+    referred = [dict(r) for r in rows]
+    total_earned = sum(r["earned"] for r in referred)
+    return render_template("reseller/referrals.html", user=user, store=store,
+                           referred=referred, total_earned=total_earned)
+
+
 @reseller_bp.route("/notifications")
 @reseller_required
 def notifications():
