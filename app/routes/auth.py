@@ -37,6 +37,15 @@ def _find_recruiting_agent(db, slug):
     ).fetchone()
 
 
+def _agent_brand_name(par, slug):
+    """Agent's display name. If they never renamed their store (still the auto
+    'Full Name's Store'), fall back to a readable version of their store URL."""
+    name = (par["store_name"] or "").strip()
+    if not name or name == f"{par['full_name']}'s Store":
+        return slug.replace("-", " ").title()
+    return name
+
+
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
@@ -108,6 +117,7 @@ def register():
         # A plain /register visit clears it so nobody is attached by accident.
         parent_name = None
         brand_logo_url = None
+        brand_slug = None
         agent_slug = request.args.get("agent", "").strip().lower()
         session.pop("agent_slug", None)
         if agent_slug:
@@ -115,8 +125,9 @@ def register():
                 par = _find_recruiting_agent(db, agent_slug)
             if par:
                 session["agent_slug"] = agent_slug
-                parent_name = par["store_name"] or par["full_name"]
+                parent_name = _agent_brand_name(par, agent_slug)
                 brand_logo_url = par["logo_url"]
+                brand_slug = agent_slug
         with global_db_read(config) as db:
             fee_row  = db.execute(
                 "SELECT value FROM app_settings WHERE key='reseller_registration_fee_pesewas'"
@@ -131,7 +142,8 @@ def register():
                                ref_code=session.get("ref", ""),
                                parent_name=parent_name,
                                brand_name=parent_name,
-                               brand_logo_url=brand_logo_url)
+                               brand_logo_url=brand_logo_url,
+                               brand_slug=brand_slug)
 
     data = request.get_json()
     config = current_app.config
