@@ -6,6 +6,15 @@
   <meta name="theme-color" content="#006B3F" />
   <meta name="description" content="Buy MTN, Telecel and AirtelTigo data bundles instantly. Fast, affordable, and delivered in seconds." />
   <title>{% block title %}Mac Data Hub{% endblock %}</title>
+  {% block social %}
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Mac Data Hub" />
+  <meta property="og:title" content="Mac Data Hub" />
+  <meta property="og:description" content="Buy MTN, Telecel and AirtelTigo data bundles instantly. Fast, affordable, and delivered in seconds." />
+  <meta property="og:url" content="{{ request.url_root.rstrip('/') }}{{ request.path }}" />
+  <meta property="og:image" content="{{ request.url_root.rstrip('/') }}/static/icons/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  {% endblock %}
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
