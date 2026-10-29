@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Create Reseller Account — Mac Data Hub{% endblock %}
+{% block title %}Create Reseller Account — {{ brand_name or 'Mac Data Hub' }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/css/auth.css" />{% endblock %}
 
 {% block content %}
@@ -106,7 +106,7 @@
         <h2>Create your reseller account</h2>
         <p>Takes about 3 minutes. Payment activates your account instantly.</p>
         {% if parent_name %}
-        <p style="margin-top:.6rem"><strong>You're joining {{ parent_name }}'s team</strong> as a sub-agent.</p>
+        <p style="margin-top:.6rem"><strong>You're joining {{ parent_name }}</strong> as a sub-agent.</p>
         {% endif %}
       </div>
 
