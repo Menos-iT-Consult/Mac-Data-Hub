@@ -104,7 +104,7 @@ def storefront(slug):
             (store["id"],)
         ).fetchall()
         owner = db.execute("SELECT parent_id FROM users WHERE id=?", (store["user_id"],)).fetchone()
-              parent_id = owner["parent_id"] if owner else None
+        parent_id = owner["parent_id"] if owner else None
         can_recruit = bool(owner) and not parent_id   # only top-level agents can have sub-agents
         floors = sub_agent_floors(db, parent_id) if parent_id else {}
         pricing = []
@@ -117,9 +117,11 @@ def storefront(slug):
             else:
                 d["price_pesewas"] = d["sp_price"] if d["sp_price"] is not None else base
             pricing.append(d)
-      return render_template("public/storefront.html", store=store, pricing=pricing,
+    return render_template("public/storefront.html", store=store, pricing=pricing,
                            can_recruit=can_recruit,
                            support_whatsapp=store["support_whatsapp"] if store["support_whatsapp"] else "")
+
+
 @public_bp.route("/checkout", methods=["GET", "POST"])
 def checkout():
     config = current_app.config
@@ -375,4 +377,3 @@ def _mirror_order(config, user_id: str, order: dict, bundle_label: str):
             "INSERT OR IGNORE INTO earnings (id, order_id, amount_pesewas) VALUES (?,?,?)",
             (str(uuid.uuid4()), order["id"], order["profit_pesewas"])
         )
-
