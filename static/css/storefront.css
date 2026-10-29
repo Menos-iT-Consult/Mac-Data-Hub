@@ -215,6 +215,7 @@
 @media (max-width: 420px) {
   .trust-bar-inner { gap: .65rem; }
 }
+
 /* ── Create an Agent Account button (top of store) ───────── */
 .sf-create-agent-btn {
   margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center; gap: .5rem;
