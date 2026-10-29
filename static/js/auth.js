@@ -65,6 +65,7 @@ function togglePw(id, btn) {
           email:     document.getElementById('email').value.trim(),
           username:  username,
           slug:      slug,
+          referral_code: (document.getElementById('referral_code') || {}).value || '',
           password:  password,
         }),
       });
