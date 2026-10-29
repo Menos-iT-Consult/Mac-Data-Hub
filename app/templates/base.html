@@ -36,7 +36,7 @@
 
   <header class="site-header">
     <div class="container header-inner">
-      <a href="/" class="logo">
+      <a href="{{ ('/s/' ~ brand_slug) if brand_slug else '/' }}" class="logo">
         {% if brand_logo_url %}
           <img src="{{ brand_logo_url }}" alt="{{ brand_name or 'Mac Data Hub' }}" class="site-logo-img" />
         {% elif brand_name %}
@@ -50,6 +50,13 @@
       </a>
 
       <nav class="nav-links" id="nav-links">
+        {% if brand_slug %}
+          {# Agent-branded sign-up page: no dashboard / sign-out, links stay inside the agent's store #}
+          <a href="/s/{{ brand_slug }}" class="nav-link">Buy Data</a>
+          {% if not session.get('role') %}
+            <a href="/login" class="btn btn-primary btn-sm">Sign in</a>
+          {% endif %}
+        {% else %}
         <a href="/" class="nav-link">Buy Data</a>
         {% if session.get('role') == 'admin' %}
           <a href="/admin" class="nav-link">Admin</a>
@@ -60,6 +67,7 @@
         {% else %}
           <a href="/apply" class="nav-link">Become a Reseller</a>
           <a href="/login" class="btn btn-primary btn-sm">Sign in</a>
+        {% endif %}
         {% endif %}
       </nav>
 
