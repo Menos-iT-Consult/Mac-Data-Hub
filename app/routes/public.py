@@ -122,6 +122,42 @@ def storefront(slug):
                            support_whatsapp=store["support_whatsapp"] if store["support_whatsapp"] else "")
 
 
+@public_bp.route("/s/<slug>/preview.jpg")
+def storefront_preview(slug):
+    """Square 600x600 JPEG of the agent's logo for link previews (WhatsApp, Telegram,
+    Facebook...). Scrapers skip big images, so the raw upload (up to 2 MB) is
+    resized to a small file. Falls back to the site icon when there is no logo."""
+    import io
+    import requests
+    from PIL import Image
+
+    config = current_app.config
+    fallback = redirect("/static/icons/icon-512.png")
+    with global_db_read(config) as db:
+        store = db.execute("SELECT logo_url FROM stores WHERE slug=?", (slug,)).fetchone()
+    logo = store["logo_url"] if store else None
+    base = (config.get("R2_ASSETS_PUBLIC_URL") or "").rstrip("/")
+    if not logo or not base or not logo.startswith(base + "/"):
+        return fallback
+    try:
+        r = requests.get(logo, timeout=8)
+        r.raise_for_status()
+        img = Image.open(io.BytesIO(r.content))
+        img = img.convert("RGBA")
+        bg = Image.new("RGBA", img.size, (255, 255, 255, 255))   # flatten transparency
+        img = Image.alpha_composite(bg, img).convert("RGB")
+        img.thumbnail((600, 600))
+        canvas = Image.new("RGB", (600, 600), (255, 255, 255))   # pad to square, no cropping
+        canvas.paste(img, ((600 - img.width) // 2, (600 - img.height) // 2))
+        buf = io.BytesIO()
+        canvas.save(buf, "JPEG", quality=85, optimize=True)
+    except Exception:
+        return fallback
+    resp = current_app.response_class(buf.getvalue(), mimetype="image/jpeg")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
+
+
 @public_bp.route("/checkout", methods=["GET", "POST"])
 def checkout():
     config = current_app.config
