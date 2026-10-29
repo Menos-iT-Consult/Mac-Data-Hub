@@ -37,12 +37,16 @@
   <header class="site-header">
     <div class="container header-inner">
       <a href="/" class="logo">
-        {% if site_logo_url %}
+        {% if brand_logo_url %}
+          <img src="{{ brand_logo_url }}" alt="{{ brand_name or 'Mac Data Hub' }}" class="site-logo-img" />
+        {% elif brand_name %}
+          <div class="logo-mark">{{ brand_name[0]|upper }}</div>
+        {% elif site_logo_url %}
           <img src="{{ site_logo_url }}" alt="Mac Data Hub" class="site-logo-img" />
         {% else %}
           <div class="logo-mark">M</div>
         {% endif %}
-        <span class="logo-text">Mac Data Hub</span>
+        <span class="logo-text">{{ brand_name or 'Mac Data Hub' }}</span>
       </a>
 
       <nav class="nav-links" id="nav-links">
