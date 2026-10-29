@@ -145,6 +145,14 @@
           <span class="field-hint">Lowercase letters, numbers, and hyphens only. This cannot be changed.</span>
         </div>
 
+        <div class="field">
+          <label for="referral_code">Referral code <span style="opacity:.6;font-weight:400">(optional)</span></label>
+          <input type="text" id="referral_code" name="referral_code" placeholder="e.g. K7M2QX"
+                 value="{{ ref_code }}" maxlength="12" autocomplete="off"
+                 oninput="this.value=this.value.replace(/\s/g,'').toUpperCase()" />
+          <span class="field-hint">Got a code from a friend? Enter it here. Leave blank if you don't have one.</span>
+        </div>
+
         <div class="field-row">
           <div class="field">
             <label for="password">Password</label>
