@@ -1,5 +1,26 @@
 {% extends "base.html" %}
 {% block title %}{{ store['store_name'] }} — Mac Data Hub{% endblock %}
+{% block social %}
+{% set _root = request.url_root.rstrip('/') %}
+{% set _desc = (store['description'] or 'Buy MTN, Telecel and AirtelTigo data bundles instantly. Fast, affordable, and delivered in seconds.') %}
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="{{ store['store_name'] }}" />
+<meta property="og:title" content="{{ store['store_name'] }}" />
+<meta property="og:description" content="{{ _desc|striptags|truncate(160) }}" />
+<meta property="og:url" content="{{ _root }}/s/{{ store['slug'] }}" />
+{% if store['logo_url'] %}
+<meta property="og:image" content="{{ _root }}/s/{{ store['slug'] }}/preview.jpg?v={{ store['logo_url']|hash8 }}" />
+<meta property="og:image:type" content="image/jpeg" />
+<meta property="og:image:width" content="600" />
+<meta property="og:image:height" content="600" />
+<meta property="og:image:alt" content="{{ store['store_name'] }} logo" />
+<meta name="twitter:image" content="{{ _root }}/s/{{ store['slug'] }}/preview.jpg?v={{ store['logo_url']|hash8 }}" />
+{% else %}
+<meta property="og:image" content="{{ _root }}/static/icons/icon-512.png" />
+{% endif %}
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="{{ store['store_name'] }}" />
+{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="/static/css/storefront.css?v=2" />
 <style>
