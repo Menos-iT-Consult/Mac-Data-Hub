@@ -27,6 +27,16 @@ def _ensure_referral_code(db, user_id):
     return code
 
 
+def _find_recruiting_agent(db, slug):
+    """Return the owner of store `slug` if they are an active, top-level agent who can take sub-agents."""
+    return db.execute(
+        """SELECT u.id, u.full_name FROM stores s JOIN users u ON u.id = s.user_id
+           WHERE s.slug=? AND u.parent_id IS NULL AND u.is_active=1
+             AND u.is_suspended=0 AND u.removed_at IS NULL""",
+        (slug,)
+    ).fetchone()
+
+
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
@@ -94,6 +104,17 @@ def register():
         ref = request.args.get("ref", "").strip().upper()
         if ref:
             session["ref"] = ref[:12]
+        # Arriving from an agent's store (?agent=<slug>) makes this a sub-agent sign-up.
+        # A plain /register visit clears it so nobody is attached by accident.
+        parent_name = None
+        agent_slug = request.args.get("agent", "").strip().lower()
+        session.pop("agent_slug", None)
+        if agent_slug:
+            with global_db_read(config) as db:
+                par = _find_recruiting_agent(db, agent_slug)
+            if par:
+                session["agent_slug"] = agent_slug
+                parent_name = par["full_name"]
         with global_db_read(config) as db:
             fee_row  = db.execute(
                 "SELECT value FROM app_settings WHERE key='reseller_registration_fee_pesewas'"
@@ -105,7 +126,8 @@ def register():
         return render_template("auth/register.html",
                                fee_pesewas=int(fee_row["value"]) if fee_row else 5000,
                                is_free=is_free,
-                               ref_code=session.get("ref", ""))
+                               ref_code=session.get("ref", ""),
+                               parent_name=parent_name)
 
     data = request.get_json()
     config = current_app.config
@@ -150,6 +172,12 @@ def register():
         user_id  = str(uuid.uuid4())
         store_id = str(uuid.uuid4())
 
+        # Signing up from an agent's store makes this account that agent's sub-agent
+        parent_id = None
+        if session.get("agent_slug"):
+            par = _find_recruiting_agent(db, session["agent_slug"])
+            parent_id = par["id"] if par else None
+
         referred_by = None
         typed_code = (data.get("referral_code") or "").strip().upper()[:12]
         ref_code = typed_code or session.get("ref")
@@ -164,9 +192,9 @@ def register():
         if is_free:
             # Activate immediately — no payment needed
             db.execute(
-                """INSERT INTO users (id, email, password_hash, full_name, phone, username, role, is_active, referred_by)
-                   VALUES (?,?,?,?,?,?,'reseller',1,?)""",
-                (user_id, email, generate_password_hash(password), full_name, phone, username, referred_by)
+                """INSERT INTO users (id, email, password_hash, full_name, phone, username, role, is_active, referred_by, parent_id)
+                   VALUES (?,?,?,?,?,?,'reseller',1,?,?)""",
+                (user_id, email, generate_password_hash(password), full_name, phone, username, referred_by, parent_id)
             )
             db.execute(
                 "INSERT INTO stores (id, user_id, slug, store_name) VALUES (?,?,?,?)",
@@ -178,9 +206,9 @@ def register():
         reg_id    = str(uuid.uuid4())
         reference = f"REG-{reg_id[:8].upper()}"
         db.execute(
-            """INSERT INTO users (id, email, password_hash, full_name, phone, username, role, is_active, referred_by)
-               VALUES (?,?,?,?,?,?,'reseller',0,?)""",
-            (user_id, email, generate_password_hash(password), full_name, phone, username, referred_by)
+            """INSERT INTO users (id, email, password_hash, full_name, phone, username, role, is_active, referred_by, parent_id)
+               VALUES (?,?,?,?,?,?,'reseller',0,?,?)""",
+            (user_id, email, generate_password_hash(password), full_name, phone, username, referred_by, parent_id)
         )
         db.execute(
             """INSERT INTO reseller_registrations
