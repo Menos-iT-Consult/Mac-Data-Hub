@@ -104,9 +104,11 @@
     <div class="register-card">
       <div class="register-card-header">
         <h2>Create your reseller account</h2>
-        <p>Takes about 3 minutes. Payment activates your account instantly.</p>
+         <p>Takes about 3 minutes. Payment activates your account instantly.</p>
+        {% if parent_name %}
+        <p style="margin-top:.6rem"><strong>You're joining {{ parent_name }}'s team</strong> as a sub-agent.</p>
+        {% endif %}
       </div>
-
       <form id="register-form" novalidate>
         <div class="field-row">
           <div class="field">
