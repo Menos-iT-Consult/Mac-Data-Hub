@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ store['store_name'] }} — Mac Data Hub{% endblock %}
 {% block head %}
-<link rel="stylesheet" href="/static/css/storefront.css" />
+<link rel="stylesheet" href="/static/css/storefront.css?v=2" />
 <style>
   .site-header { display: none !important; }
   .site-footer .footer-brand,
@@ -23,6 +23,24 @@
   .sf-theme-moon { display: none; }
   [data-theme="dark"] .sf-theme-sun  { display: none; }
   [data-theme="dark"] .sf-theme-moon { display: block; }
+
+  /* ── Create an Agent Account button ── */
+  .storefront-hero a.sf-create-agent-btn {
+    margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center; gap: .5rem;
+    margin-top: 2.25rem;               /* sits below the theme toggle, far right */
+    padding: .7rem 1.2rem; border-radius: 999px; font-weight: 800; font-size: .88rem;
+    color: #fff !important; text-decoration: none !important; white-space: nowrap;
+    background: rgba(255,255,255,.22); border: 1.5px solid rgba(255,255,255,.7);
+    box-shadow: 0 2px 10px rgba(0,0,0,.25);
+    backdrop-filter: blur(10px);
+    transition: background .2s, transform .2s;
+  }
+  .storefront-hero a.sf-create-agent-btn svg { stroke: #fff; }
+  .storefront-hero a.sf-create-agent-btn:hover { background: rgba(255,255,255,.36); transform: translateY(-1px); }
+  @media (max-width: 640px) {
+    .sf-hero-inner { flex-wrap: wrap; }
+    .storefront-hero a.sf-create-agent-btn { margin: .75rem 0 0; width: 100%; justify-content: center; }
+  }
 </style>
 {% endblock %}
 
