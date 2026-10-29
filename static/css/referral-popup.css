@@ -1,6 +1,6 @@
 .ref-overlay{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);animation:refFade .2s ease}
 .ref-overlay.ref-hide{display:none}
-.ref-modal{width:100%;max-width:440px;max-height:calc(100vh - 2rem);max-height:calc(100dvh - 2rem);overflow-y:auto;overscroll-behavior:contain;background:var(--white,#fff);color:var(--text-2,#1e293b);border-radius:20px;box-shadow:0 24px 56px rgba(0,0,0,.3);animation:refPop .3s var(--spring,cubic-bezier(.34,1.56,.64,1))}
+.ref-modal{width:100%;max-width:440px;max-height:calc(100vh - 2rem);overflow-y:auto;background:var(--white,#fff);color:var(--text-2,#1e293b);border-radius:20px;box-shadow:0 24px 56px rgba(0,0,0,.3);animation:refPop .3s var(--spring,cubic-bezier(.34,1.56,.64,1))}
 .ref-hero{position:relative;background:#FFB800;padding:1.6rem 1.4rem 1.3rem;color:#111}
 .ref-eyebrow{margin:0 0 .6rem;font-size:.7rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;opacity:.75}
 .ref-hero h2{margin:0 0 .5rem;font-size:1.75rem;line-height:1.1;font-weight:900;color:#000;padding-right:2.5rem}
@@ -29,24 +29,3 @@
 [data-theme="dark"] .ref-code{color:#fff}
 @keyframes refFade{from{opacity:0}to{opacity:1}}
 @keyframes refPop{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
-
-/* Mobile: compact bottom sheet so the page stays visible behind it */
-@media (max-width:600px){
-  .ref-overlay{align-items:flex-end;padding:0}
-  .ref-modal{max-width:none;max-height:78vh;max-height:78dvh;border-radius:20px 20px 0 0;animation:refSheet .3s ease}
-  .ref-hero{padding:1rem 1.1rem .9rem}
-  .ref-eyebrow{display:none}
-  .ref-hero h2{font-size:1.3rem;margin-bottom:.3rem;padding-right:2.6rem}
-  .ref-sub{font-size:.85rem}
-  .ref-close{top:.7rem;right:.7rem;width:36px;height:36px}
-  .ref-body{padding:.9rem 1.1rem calc(1rem + env(safe-area-inset-bottom,0px))}
-  .ref-steps{gap:.55rem;margin-bottom:.8rem}
-  .ref-steps li{font-size:.88rem}
-  .ref-table,.ref-note{display:none}
-  .ref-code-box{padding:.65rem .85rem;margin-bottom:.7rem}
-  .ref-code{font-size:1.35rem}
-  .ref-share{padding:.85rem;font-size:1rem}
-  .ref-actions{margin-top:.6rem}
-  .ref-view,.ref-later{padding:.65rem;font-size:.9rem}
-}
-@keyframes refSheet{from{transform:translateY(100%)}to{transform:none}}
