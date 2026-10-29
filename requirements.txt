@@ -7,3 +7,4 @@ Werkzeug==3.0.3
 gunicorn==22.0.0
 pywebpush==2.0.0
 py-vapid==1.9.1
+Pillow>=10.3.0
