@@ -44,7 +44,7 @@
       <h1>{{ store['store_name'] }}</h1>
       {% if store['description'] %}
         <p class="sf-desc">{{ store['description'] }}</p>
-          {% endif %}
+      {% endif %}
     </div>
     {% if can_recruit %}
     <a href="/register?agent={{ store['slug'] }}" class="sf-create-agent-btn">
