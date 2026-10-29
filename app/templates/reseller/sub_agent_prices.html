@@ -27,11 +27,6 @@
         <a href="/dashboard/sub-agents/prices" class="sa-tab active">Sub-agent prices</a>
       </div>
 
-      <div class="pricing-info-bar">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        Prices are in <strong>Ghana Cedis (GHS)</strong>. This is what your sub-agents <strong>pay you</strong> for each bundle, so it must be at or above your base price. The difference is <strong>your profit on every sale they make</strong>. Sub-agents then add their own margin on top when selling to customers.
-      </div>
-
       <form id="pricing-form" data-endpoint="/dashboard/sub-agents/prices" novalidate>
         {% set networks = [('mtn', 'MTN'), ('telecel', 'Telecel'), ('airteltigo', 'AirtelTigo')] %}
         {% for net_key, net_label in networks %}
