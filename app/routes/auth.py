@@ -96,7 +96,8 @@ def register():
         is_free = free_row and free_row["value"] == "1"
         return render_template("auth/register.html",
                                fee_pesewas=int(fee_row["value"]) if fee_row else 5000,
-                               is_free=is_free)
+                               is_free=is_free,
+                               ref_code=session.get("ref", ""))
 
     data = request.get_json()
     config = current_app.config
@@ -142,11 +143,14 @@ def register():
         store_id = str(uuid.uuid4())
 
         referred_by = None
-        ref_code = session.get("ref")
+        typed_code = (data.get("referral_code") or "").strip().upper()[:12]
+        ref_code = typed_code or session.get("ref")
         if ref_code:
             referrer = db.execute(
                 "SELECT id FROM users WHERE referral_code=?", (ref_code,)
             ).fetchone()
+            if typed_code and not referrer:
+                return jsonify({"error": "Referral code not found. Check it or leave it blank."}), 400
             referred_by = referrer["id"] if referrer else None
 
         if is_free:
