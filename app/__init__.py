@@ -61,6 +61,12 @@ def create_app():
         h = _hashes.get(rel, "0")
         return f"/static/{rel}?h={h}"
 
+    @app.template_filter("hash8")
+    def hash8(value):
+        """Short stable hash, used to cache-bust link-preview image URLs."""
+        import hashlib
+        return hashlib.md5(str(value or "").encode()).hexdigest()[:8]
+
     @app.context_processor
     def inject_globals():
         ctx = {
