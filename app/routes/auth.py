@@ -30,7 +30,7 @@ def _ensure_referral_code(db, user_id):
 def _find_recruiting_agent(db, slug):
     """Return the owner of store `slug` if they are an active, top-level agent who can take sub-agents."""
     return db.execute(
-        """SELECT u.id, u.full_name FROM stores s JOIN users u ON u.id = s.user_id
+        """SELECT u.id, u.full_name, s.store_name, s.logo_url FROM stores s JOIN users u ON u.id = s.user_id
            WHERE s.slug=? AND u.parent_id IS NULL AND u.is_active=1
              AND u.is_suspended=0 AND u.removed_at IS NULL""",
         (slug,)
@@ -107,6 +107,7 @@ def register():
         # Arriving from an agent's store (?agent=<slug>) makes this a sub-agent sign-up.
         # A plain /register visit clears it so nobody is attached by accident.
         parent_name = None
+        brand_logo_url = None
         agent_slug = request.args.get("agent", "").strip().lower()
         session.pop("agent_slug", None)
         if agent_slug:
@@ -114,7 +115,8 @@ def register():
                 par = _find_recruiting_agent(db, agent_slug)
             if par:
                 session["agent_slug"] = agent_slug
-                parent_name = par["full_name"]
+                parent_name = par["store_name"] or par["full_name"]
+                brand_logo_url = par["logo_url"]
         with global_db_read(config) as db:
             fee_row  = db.execute(
                 "SELECT value FROM app_settings WHERE key='reseller_registration_fee_pesewas'"
@@ -127,7 +129,9 @@ def register():
                                fee_pesewas=int(fee_row["value"]) if fee_row else 5000,
                                is_free=is_free,
                                ref_code=session.get("ref", ""),
-                               parent_name=parent_name)
+                               parent_name=parent_name,
+                               brand_name=parent_name,
+                               brand_logo_url=brand_logo_url)
 
     data = request.get_json()
     config = current_app.config
