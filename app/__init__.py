@@ -75,6 +75,7 @@ def create_app():
             "announcement_type": "info",
             "site_logo_url": "",
             # One-shot: set at sign-in, cleared as soon as a page renders it
+            "is_sub_agent": bool(session.get("is_sub_agent")),
             "referral_popup_code": session.pop("referral_popup", None) if session.get("role") == "reseller" else None,
         }
         role = session.get("role")
@@ -122,6 +123,7 @@ def create_app():
     from .routes.public import public_bp
     from .routes.auth import auth_bp
     from .routes.reseller import reseller_bp
+    from .routes.sub_agents import sub_agents_bp
     from .routes.admin import admin_bp
     from .routes.webhook import webhook_bp
     from .routes.push import push_bp
@@ -129,6 +131,7 @@ def create_app():
     app.register_blueprint(public_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(reseller_bp)
+    app.register_blueprint(sub_agents_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(webhook_bp)
     app.register_blueprint(push_bp)

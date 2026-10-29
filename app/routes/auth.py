@@ -54,6 +54,13 @@ def login():
         flash("Invalid email/username or password.", "error")
         return render_template("auth/login.html")
 
+    if user["removed_at"]:
+        flash("Invalid email/username or password.", "error")
+        return render_template("auth/login.html")
+    if user["is_suspended"]:
+        flash("Your account has been suspended. Please contact the agent who manages your account or support.", "error")
+        return render_template("auth/login.html")
+
     # Make sure this account has a referral code (older accounts won't yet)
     with global_db(config) as db:
         code = _ensure_referral_code(db, user["id"])
@@ -63,6 +70,7 @@ def login():
     session["role"] = "reseller"
     session["email"] = user["email"]
     session["full_name"] = user["full_name"]
+    session["is_sub_agent"] = bool(user["parent_id"])
     session["referral_popup"] = code   # shown once, right after sign-in
     return redirect(url_for("reseller.dashboard"))
 

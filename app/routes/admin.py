@@ -7,6 +7,8 @@ from ..services.push import broadcast_push
 from ..services.storage import upload_asset, delete_asset
 from ..services.gigzhub import get_offers, get_balance as gigzhub_get_balance
 from ..services.paystack import create_transfer_recipient
+from ..services.team import (credit_agent_cut, toggle_flag, reset_password as _reset_pw,
+                             remove_sub_agent)
 ALLOWED_LOGO_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_LOGO_BYTES = 2 * 1024 * 1024
 
@@ -247,6 +249,123 @@ def resellers():
     return render_template("admin/resellers.html", resellers=all_resellers, counts=counts)
 
 
+@admin_bp.route("/network")
+@admin_required
+def network():
+    """Every agent with their sub-agents and the people they referred."""
+    config = current_app.config
+    with global_db_read(config) as db:
+        users = [dict(r) for r in db.execute(
+            """SELECT u.id, u.full_name, u.email, u.phone, u.username, u.wallet_pesewas,
+                      u.is_active, u.is_suspended, u.withdrawals_blocked, u.removed_at,
+                      u.parent_id, u.referred_by, u.referral_code, u.created_at,
+                      s.store_name, s.slug
+               FROM users u LEFT JOIN stores s ON s.user_id = u.id
+               WHERE u.role='reseller' ORDER BY u.created_at DESC"""
+        ).fetchall()]
+        sales = {r["user_id"]: (r["c"], r["p"], r["a"]) for r in db.execute(
+            """SELECT st.user_id AS user_id, COUNT(*) AS c,
+                      COALESCE(SUM(o.profit_pesewas),0) AS p,
+                      COALESCE(SUM(o.agent_profit_pesewas),0) AS a
+               FROM orders o JOIN stores st ON st.id = o.store_id
+               WHERE o.status='dispatched' GROUP BY st.user_id"""
+        ).fetchall()}
+        ref_earned = {(r["referrer_id"], r["referred_id"]): r["t"] for r in db.execute(
+            """SELECT referrer_id, referred_id, SUM(amount_pesewas) AS t
+               FROM referral_earnings GROUP BY referrer_id, referred_id"""
+        ).fetchall()}
+
+    for u in users:
+        u["sales"], u["profit"], u["agent_cut"] = sales.get(u["id"], (0, 0, 0))
+
+    by_id = {u["id"]: u for u in users}
+    subs_of, refs_of = {}, {}
+    for u in users:
+        if u["parent_id"]:
+            subs_of.setdefault(u["parent_id"], []).append(u)
+        if u["referred_by"]:
+            refs_of.setdefault(u["referred_by"], []).append(
+                dict(u, earned=ref_earned.get((u["referred_by"], u["id"]), 0)))
+
+    agents = []
+    for u in users:
+        if u["parent_id"] or u["removed_at"]:
+            continue
+        subs = subs_of.get(u["id"], [])
+        live_subs = [x for x in subs if not x["removed_at"]]
+        refs = refs_of.get(u["id"], [])
+        agents.append(dict(
+            u,
+            subs=subs,
+            sub_count=len(live_subs),
+            sub_sales=sum(x["sales"] for x in live_subs),
+            sub_cut=sum(x["agent_cut"] for x in live_subs),
+            refs=refs,
+            ref_count=len(refs),
+            ref_earned=sum(x["earned"] for x in refs),
+        ))
+    # Biggest teams first, then newest
+    agents.sort(key=lambda a: (-a["sub_count"], -a["ref_count"]))
+
+    totals = {
+        "agents": len(agents),
+        "sub_agents": sum(a["sub_count"] for a in agents),
+        "referrals": sum(a["ref_count"] for a in agents),
+        "referral_earned": sum(a["ref_earned"] for a in agents),
+    }
+    return render_template("admin/network.html", agents=agents, totals=totals)
+
+
+def _network_target(db, user_id):
+    return db.execute(
+        "SELECT * FROM users WHERE id=? AND role='reseller' AND removed_at IS NULL", (user_id,)
+    ).fetchone()
+
+
+@admin_bp.route("/network/<user_id>/suspend", methods=["POST"])
+@admin_required
+def network_suspend(user_id):
+    with global_db(current_app.config) as db:
+        if not _network_target(db, user_id):
+            return jsonify({"ok": False, "error": "Account not found."}), 404
+        return jsonify({"ok": True, "is_suspended": toggle_flag(db, user_id, "is_suspended")})
+
+
+@admin_bp.route("/network/<user_id>/block-withdrawals", methods=["POST"])
+@admin_required
+def network_block_withdrawals(user_id):
+    with global_db(current_app.config) as db:
+        if not _network_target(db, user_id):
+            return jsonify({"ok": False, "error": "Account not found."}), 404
+        return jsonify({"ok": True, "withdrawals_blocked": toggle_flag(db, user_id, "withdrawals_blocked")})
+
+
+@admin_bp.route("/network/<user_id>/reset-password", methods=["POST"])
+@admin_required
+def network_reset_password(user_id):
+    with global_db(current_app.config) as db:
+        user = _network_target(db, user_id)
+        if not user:
+            return jsonify({"ok": False, "error": "Account not found."}), 404
+        pw = _reset_pw(db, user_id)
+    return jsonify({"ok": True, "password": pw, "username": user["username"],
+                    "email": user["email"], "name": user["full_name"]})
+
+
+@admin_bp.route("/network/<user_id>/remove", methods=["POST"])
+@admin_required
+def network_remove(user_id):
+    """Remove a sub-agent (top-level agents are deactivated from the Resellers page instead)."""
+    with global_db(current_app.config) as db:
+        user = _network_target(db, user_id)
+        if not user or not user["parent_id"]:
+            return jsonify({"ok": False, "error": "Sub-agent not found."}), 404
+        error = remove_sub_agent(db, user)
+        if error:
+            return jsonify({"ok": False, "error": error}), 400
+    return jsonify({"ok": True})
+
+
 @admin_bp.route("/resellers/<user_id>/toggle", methods=["POST"])
 @admin_required
 def toggle_reseller(user_id):
@@ -330,15 +449,18 @@ def redispatch_order(order_id):
         )
         # Only credit profit if the order was previously failed (not yet credited).
         # If it was already dispatched once, profit was already credited by the webhook.
-        if order["store_id"] and order["profit_pesewas"] > 0 and order["status"] == "failed":
+        if order["store_id"] and order["status"] == "failed":
             store = db.execute(
                 "SELECT user_id FROM stores WHERE id=?", (order["store_id"],)
             ).fetchone()
             if store:
-                db.execute(
-                    "UPDATE users SET wallet_pesewas = wallet_pesewas + ? WHERE id=?",
-                    (order["profit_pesewas"], store["user_id"])
-                )
+                if order["profit_pesewas"] > 0:
+                    db.execute(
+                        "UPDATE users SET wallet_pesewas = wallet_pesewas + ? WHERE id=?",
+                        (order["profit_pesewas"], store["user_id"])
+                    )
+                lbl = db.execute("SELECT label FROM data_bundles WHERE id=?", (order["bundle_id"],)).fetchone()
+                credit_agent_cut(config, db, order, (lbl["label"] if lbl else order["network"]))
 
     return jsonify({"ok": True, "gigzhub_id": gigzhub_id})
 

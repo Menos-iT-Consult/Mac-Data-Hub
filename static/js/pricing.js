@@ -21,6 +21,7 @@ document.querySelectorAll('.price-input').forEach(input => {
 const form   = document.getElementById('pricing-form');
 const errEl  = document.getElementById('pricing-error');
 const saveBtn = document.getElementById('save-btn');
+const endpoint = form.dataset.endpoint || '/dashboard/pricing';
 
 form.addEventListener('submit', async e => {
   e.preventDefault();
@@ -35,7 +36,7 @@ form.addEventListener('submit', async e => {
     payload[input.name] = ghs.toFixed(2);  // send GHS float string — route does * 100
   });
   if (tooLow) {
-    errEl.textContent = 'Your price cannot be lower than the base price.';
+    errEl.textContent = 'The price cannot be lower than the base price.';
     errEl.classList.remove('hidden');
     return;
   }
@@ -44,7 +45,7 @@ form.addEventListener('submit', async e => {
   saveBtn.textContent = 'Saving…';
 
   try {
-    const resp = await fetch('/dashboard/pricing', {
+    const resp = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

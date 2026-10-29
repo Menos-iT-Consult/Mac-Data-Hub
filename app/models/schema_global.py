@@ -63,6 +63,15 @@ CREATE TABLE IF NOT EXISTS store_pricing (
     UNIQUE(store_id, bundle_id)
 );
 
+-- Price an agent charges their sub-agents per bundle (never below the base price)
+CREATE TABLE IF NOT EXISTS sub_agent_pricing (
+    id             TEXT PRIMARY KEY,
+    parent_id      TEXT NOT NULL REFERENCES users(id),
+    bundle_id      TEXT NOT NULL REFERENCES data_bundles(id),
+    price_pesewas  INTEGER NOT NULL,
+    UNIQUE(parent_id, bundle_id)
+);
+
 -- Reseller registration fee payments
 CREATE TABLE IF NOT EXISTS reseller_registrations (
     id                  TEXT PRIMARY KEY,

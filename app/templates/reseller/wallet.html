@@ -21,6 +21,10 @@
 
     <div class="dash-content">
 
+      {% if user['withdrawals_blocked'] %}
+      <div class="form-error" style="margin-bottom:1rem">Withdrawals are disabled on your account. Please contact the agent who manages you or support.</div>
+      {% endif %}
+
       <!-- Balance card -->
       <div class="wallet-balance-card">
         <div class="wbc-label">Available balance</div>

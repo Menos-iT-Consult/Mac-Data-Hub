@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Agent Network — Admin{% endblock %}
+{% block body_class %}dash-page{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/dashboard.css" /><link rel="stylesheet" href="/static/css/sub-agents.css?v=2" />{% endblock %}
+
+{% block content %}
+<div class="dash-layout">
+  {% include "partials/admin_nav.html" %}
+
+  <div class="dash-main">
+    <div class="dash-topbar">
+      <button class="topbar-hamburger" id="sidebar-toggle" aria-label="Open menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="topbar-title-wrap">
+        <span class="topbar-title">Agent Network</span>
+        <span class="topbar-subtitle">Agents, their sub-agents and referrals</span>
+      </div>
+      {% include "partials/topbar_actions.html" %}
+    </div>
+
+    <div class="dash-content">
+      <div class="count-pills">
+        <div class="count-pill"><span class="count-pill-num">{{ totals.agents }}</span><span class="count-pill-label">Agents</span></div>
+        <div class="count-pill count-pill-green"><span class="count-pill-num">{{ totals.sub_agents }}</span><span class="count-pill-label">Sub-agents</span></div>
+        <div class="count-pill count-pill-yellow"><span class="count-pill-num">{{ totals.referrals }}</span><span class="count-pill-label">Referrals</span></div>
+        <div class="count-pill"><span class="count-pill-num">GHS {{ '%.2f'|format(totals.referral_earned / 100) }}</span><span class="count-pill-label">Referral bonuses paid</span></div>
+      </div>
+
+      <div class="filter-bar">
+        <div class="search-wrap">
+          <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="net-search" placeholder="Search agent, sub-agent or referral…" />
+        </div>
+      </div>
+
+      {% for a in agents %}
+      <details class="panel net-agent" data-agent="{{ a.id }}"
+        data-search="{{ ([a.full_name, a.email, a.phone, a.store_name or '', a.username or ''] + a.subs|map(attribute='full_name')|list + a.refs|map(attribute='full_name')|list)|join(' ')|lower }}">
+        <summary>
+          <div>
+            <div class="net-head-name">{{ a.full_name }}
+              {% if a.is_suspended %}<span class="status-pill status-failed">Suspended</span>{% elif not a.is_active %}<span class="status-pill status-pending">Inactive</span>{% endif %}
+            </div>
+            <div class="net-head-sub">{{ a.phone }} · {{ a.email }}{% if a.slug %} · <a href="/s/{{ a.slug }}" target="_blank" rel="noopener">/s/{{ a.slug }}</a>{% endif %}</div>
+          </div>
+          <div class="net-badges">
+            <span class="net-badge">{{ a.sub_count }} sub-agent{{ '' if a.sub_count == 1 else 's' }}</span>
+            <span class="net-badge">{{ a.ref_count }} referral{{ '' if a.ref_count == 1 else 's' }}</span>
+            <span class="net-badge">{{ a.sales }} sale{{ '' if a.sales == 1 else 's' }}</span>
+            <span class="net-badge">Team earnings GHS {{ '%.2f'|format(a.sub_cut / 100) }}</span>
+            <span class="net-badge">Wallet GHS {{ '%.2f'|format(a.wallet_pesewas / 100) }}</span>
+          </div>
+        </summary>
+        <div style="padding:0 1.2rem .8rem">
+          <h4 class="net-ctrl-title" style="font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin:0">Agent controls</h4>
+          <div class="net-ctrl" data-user="{{ a.id }}" data-name="{{ a.full_name }}">
+                    <button class="btn btn-ghost btn-sm" data-act="suspend" data-state="{{ a.is_suspended }}">{{ 'Unsuspend' if a.is_suspended else 'Suspend' }}</button>
+                    <button class="btn btn-ghost btn-sm" data-act="block-withdrawals" data-state="{{ a.withdrawals_blocked }}">{{ 'Allow withdrawals' if a.withdrawals_blocked else 'Block withdrawals' }}</button>
+                    <button class="btn btn-ghost btn-sm" data-act="reset-password">Reset password</button>
+                    
+                  </div>
+        </div>
+        <div class="net-body">
+          <div class="net-col">
+            <h4>Sub-agents</h4>
+            {% if a.subs %}
+              {% for s in a.subs %}
+              <div class="net-row {{ 'removed' if s.removed_at }}">
+                <div>
+                  <b>{{ s.full_name }}</b>
+                  {% if s.removed_at %}<span class="status-pill status-failed">Removed</span>
+                  {% elif s.is_suspended %}<span class="status-pill status-failed">Suspended</span>{% endif %}
+                  {% if s.withdrawals_blocked and not s.removed_at %}<span class="status-pill status-pending">Withdrawals blocked</span>{% endif %}
+                  <small>{{ s.phone }}{% if s.slug and not s.removed_at %} · <a href="/s/{{ s.slug }}" target="_blank" rel="noopener">/s/{{ s.slug }}</a>{% endif %}</small>
+                  {% if not s.removed_at %}
+                  <div class="net-ctrl" data-user="{{ s.id }}" data-name="{{ s.full_name }}">
+                    <button class="btn btn-ghost btn-sm" data-act="suspend" data-state="{{ s.is_suspended }}">{{ 'Unsuspend' if s.is_suspended else 'Suspend' }}</button>
+                    <button class="btn btn-ghost btn-sm" data-act="block-withdrawals" data-state="{{ s.withdrawals_blocked }}">{{ 'Allow withdrawals' if s.withdrawals_blocked else 'Block withdrawals' }}</button>
+                    <button class="btn btn-ghost btn-sm" data-act="reset-password">Reset password</button>
+                    <button class="btn btn-danger btn-sm" data-act="remove">Remove</button>
+                  </div>
+                  {% endif %}
+                </div>
+                <div style="text-align:right;white-space:nowrap">
+                  <b>GHS {{ '%.2f'|format(s.profit / 100) }}</b>
+                  <small>{{ s.sales }} sale{{ '' if s.sales == 1 else 's' }} · wallet GHS {{ '%.2f'|format(s.wallet_pesewas / 100) }}</small>
+                  <small>agent cut GHS {{ '%.2f'|format(s.agent_cut / 100) }}</small>
+                </div>
+              </div>
+              {% endfor %}
+            {% else %}<div class="net-empty">No sub-agents.</div>{% endif %}
+          </div>
+          <div class="net-col">
+            <h4>Referrals {% if a.referral_code %}<span class="td-muted" style="text-transform:none;letter-spacing:0">· code {{ a.referral_code }}</span>{% endif %}</h4>
+            {% if a.refs %}
+              {% for r in a.refs %}
+              <div class="net-row">
+                <div><b>{{ r.full_name }}</b><small>Joined {{ r.created_at[:10] }}{% if r.parent_id %} · sub-agent{% endif %}</small></div>
+                <div style="text-align:right;white-space:nowrap"><b style="color:var(--green)">+GHS {{ '%.2f'|format(r.earned / 100) }}</b></div>
+              </div>
+              {% endfor %}
+              <div class="net-row"><b>Total bonuses</b><b style="color:var(--green)">GHS {{ '%.2f'|format(a.ref_earned / 100) }}</b></div>
+            {% else %}<div class="net-empty">No referrals yet.</div>{% endif %}
+          </div>
+        </div>
+      </details>
+      {% else %}
+      <div class="empty-state empty-state-lg"><h3>No agents yet</h3><p>Agents appear here once they register.</p></div>
+      {% endfor %}
+      <div class="empty-state hidden" id="net-no-match"><p>Nothing matches your search.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="admin-modal hidden" id="net-cred-modal">
+  <div class="admin-modal-backdrop" data-close></div>
+  <div class="admin-modal-card">
+    <div class="admin-modal-header"><h3 class="admin-modal-title">New password</h3><button class="admin-modal-close" data-close aria-label="Close">&times;</button></div>
+    <p class="td-muted" style="font-size:.85rem;margin:0 0 1rem">Share this with the account owner. It is shown only once.</p>
+    <pre class="sa-cred" id="net-cred-box"></pre>
+    <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close>Done</button><button type="button" class="btn btn-primary" id="net-cred-copy">Copy</button></div>
+  </div>
+</div>
+<div class="admin-modal hidden" id="net-confirm-modal">
+  <div class="admin-modal-backdrop" data-close></div>
+  <div class="admin-modal-card">
+    <div class="admin-modal-header"><h3 class="admin-modal-title" id="net-confirm-title">Are you sure?</h3><button class="admin-modal-close" data-close aria-label="Close">&times;</button></div>
+    <p id="net-confirm-text" style="margin:0 0 .5rem;font-size:.9rem"></p>
+    <div id="net-confirm-error" class="form-error hidden"></div>
+    <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close>Cancel</button><button type="button" class="btn btn-primary" id="net-confirm-ok">Confirm</button></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/admin_network.js?v=1"></script>
+<script>
+  (function () {
+    const input = document.getElementById('net-search');
+    if (!input) return;
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      let shown = 0;
+      document.querySelectorAll('.net-agent').forEach(d => {
+        const hit = !q || d.dataset.search.includes(q);
+        d.classList.toggle('hidden', !hit);
+        if (q && hit) d.open = true;
+        if (hit) shown++;
+      });
+      document.getElementById('net-no-match').classList.toggle('hidden', shown > 0 || !q);
+    });
+  })();
+</script>
+{% endblock %}

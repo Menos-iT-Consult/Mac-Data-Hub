@@ -6,8 +6,20 @@ from ..services.paystack import initialize_transaction, verify_transaction, add_
 from ..services.gigzhub import dispatch_bundle
 from ..services.push import broadcast_push
 from ..services.referrals import credit_referral
+from ..services.pricing_chain import resolve_store_price, sub_agent_floors
+from ..services.team import credit_agent_cut
 
 public_bp = Blueprint("public", __name__)
+
+
+def _store_unavailable(db, store) -> bool:
+    """True when the store's owner is suspended or removed."""
+    if not store:
+        return False
+    owner = db.execute(
+        "SELECT is_suspended, removed_at FROM users WHERE id=?", (store["user_id"],)
+    ).fetchone()
+    return bool(owner and (owner["is_suspended"] or owner["removed_at"]))
 
 
 @public_bp.route("/.well-known/assetlinks.json")
@@ -79,10 +91,10 @@ def storefront(slug):
     config = current_app.config
     with global_db_read(config) as db:
         store = db.execute("SELECT * FROM stores WHERE slug=?", (slug,)).fetchone()
-        if not store:
+        if not store or _store_unavailable(db, store):
             return render_template("public/404.html"), 404
-        pricing = db.execute(
-            """SELECT COALESCE(sp.price_pesewas, db.base_price_pesewas) AS price_pesewas,
+        rows = db.execute(
+            """SELECT sp.price_pesewas AS sp_price, db.base_price_pesewas AS base_price,
                       db.id as bundle_id, db.label, db.network,
                       db.volume_mb, db.validity_days, db.offer_slug
                FROM data_bundles db
@@ -91,6 +103,19 @@ def storefront(slug):
                ORDER BY db.network, db.volume_mb""",
             (store["id"],)
         ).fetchall()
+        owner = db.execute("SELECT parent_id FROM users WHERE id=?", (store["user_id"],)).fetchone()
+        parent_id = owner["parent_id"] if owner else None
+        floors = sub_agent_floors(db, parent_id) if parent_id else {}
+        pricing = []
+        for r in rows:
+            d = dict(r)
+            base = d["base_price"]
+            if parent_id:
+                floor = max(floors.get(d["bundle_id"], base), base)
+                d["price_pesewas"] = max(d["sp_price"], floor) if d["sp_price"] is not None else floor
+            else:
+                d["price_pesewas"] = d["sp_price"] if d["sp_price"] is not None else base
+            pricing.append(d)
     return render_template("public/storefront.html", store=store, pricing=pricing,
                            support_whatsapp=store["support_whatsapp"] if store["support_whatsapp"] else "")
 
@@ -104,18 +129,14 @@ def checkout():
         with global_db_read(config) as db:
             bundle = db.execute("SELECT * FROM data_bundles WHERE id=?", (bundle_id,)).fetchone()
             store = db.execute("SELECT * FROM stores WHERE id=?", (store_id,)).fetchone() if store_id else None
-            price_row = None
-            if store:
-                price_row = db.execute(
-                    "SELECT price_pesewas FROM store_pricing WHERE store_id=? AND bundle_id=?",
-                    (store_id, bundle_id)
-                ).fetchone()
-        if not bundle:
+            split = resolve_store_price(db, store, bundle) if (store and bundle) else None
+            unavailable = _store_unavailable(db, store)
+        if not bundle or unavailable:
             return redirect(url_for("public.home"))
-        if price_row:
-            price = price_row["price_pesewas"]
+        if split:
+            price = split["price"]
         else:
-            price = bundle["base_price_pesewas"] if store else (bundle["guest_price_pesewas"] or bundle["base_price_pesewas"])
+            price = bundle["guest_price_pesewas"] or bundle["base_price_pesewas"]
         charge, fee = add_paystack_charge(price)
         return render_template("public/checkout.html", bundle=bundle, store=store,
                                price=price, fee_pesewas=fee, charge_pesewas=charge)
@@ -132,20 +153,15 @@ def checkout():
         if not bundle:
             return jsonify({"error": "Bundle not found."}), 404
         store = db.execute("SELECT * FROM stores WHERE id=?", (store_id,)).fetchone() if store_id else None
-        price_row = None
+        if _store_unavailable(db, store):
+            return jsonify({"error": "This store is currently unavailable."}), 403
         if store:
-            price_row = db.execute(
-                "SELECT price_pesewas FROM store_pricing WHERE store_id=? AND bundle_id=?",
-                (store_id, bundle_id)
-            ).fetchone()
-
-        if price_row:
-            price = price_row["price_pesewas"]
-        elif store:
-            price = bundle["base_price_pesewas"]
+            split = resolve_store_price(db, store, bundle)
+            price, profit = split["price"], split["profit"]
+            agent_id, agent_profit = split["agent_id"], split["agent_profit"]
         else:
             price = bundle["guest_price_pesewas"] or bundle["base_price_pesewas"]
-        profit = price - bundle["base_price_pesewas"] if store else 0
+            profit, agent_id, agent_profit = 0, None, 0
         order_id = str(uuid.uuid4())
         reference = f"MDH-{order_id[:8].upper()}"
         # Customer pays price + Paystack fee so seller receives full price
@@ -155,11 +171,12 @@ def checkout():
             """INSERT INTO orders
                (id, store_id, bundle_id, customer_phone, customer_email, network,
                 volume_mb, amount_pesewas, base_cost_pesewas, profit_pesewas,
-                paystack_reference, status)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending')""",
+                agent_id, agent_profit_pesewas, paystack_reference, status)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'pending')""",
             (order_id, store_id, bundle_id, phone, email,
              bundle["network"], bundle["volume_mb"],
-             price, bundle["base_price_pesewas"], profit, reference)
+             price, bundle["base_price_pesewas"], profit,
+             agent_id, agent_profit, reference)
         )
 
     callback_url = f"{config['APP_URL']}/checkout/verify?ref={reference}"
@@ -319,6 +336,7 @@ def verify_payment():
                     )
                 label = order_dict["bundle_label"] or order_dict["network"]
                 _mirror_order(config, store["user_id"], order_dict, label)
+                credit_agent_cut(config, db, order_dict, label)
                 try:
                     broadcast_push(config, store["user_id"],
                                    "Order dispatched!",

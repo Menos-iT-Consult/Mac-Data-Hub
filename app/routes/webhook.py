@@ -5,6 +5,7 @@ from ..services.paystack import verify_webhook_signature
 from ..services.gigzhub import dispatch_bundle
 from ..services.push import broadcast_push
 from ..services.referrals import credit_referral
+from ..services.team import credit_agent_cut
 
 webhook_bp = Blueprint("webhook", __name__)
 
@@ -128,6 +129,7 @@ def _handle_order(config, reference: str, metadata: dict):
                 ).fetchone()
                 label = bundle_row["label"] if bundle_row else order["network"]
                 _mirror_order_to_user_db(config, store["user_id"], order, label)
+                credit_agent_cut(config, db, order, label)
                 profit_ghs = "GHS %.2f" % (order["profit_pesewas"] / 100)
                 try:
                     broadcast_push(config, store["user_id"],

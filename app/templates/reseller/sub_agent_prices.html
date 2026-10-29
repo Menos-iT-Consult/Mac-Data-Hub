@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Sub-agent Prices — Mac Data Hub{% endblock %}
+{% block body_class %}dash-page{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/dashboard.css" /><link rel="stylesheet" href="/static/css/sub-agents.css?v=2" />{% endblock %}
+
+{% block content %}
+<div class="dash-layout">
+  {% include "partials/reseller_nav.html" %}
+
+  <div class="dash-main">
+    <div class="dash-topbar">
+      <button class="topbar-hamburger" id="sidebar-toggle" aria-label="Open menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="topbar-title-wrap">
+        <span class="topbar-title">Sub-agent Prices</span>
+        <span class="topbar-subtitle">What your sub-agents pay you per bundle</span>
+      </div>
+      <button type="submit" form="pricing-form" class="btn btn-primary btn-sm" id="save-btn" style="flex-shrink:0">Save prices</button>
+      {% include "partials/topbar_actions.html" %}
+    </div>
+
+    <div class="dash-content">
+
+      <div class="sa-tabs">
+        <a href="/dashboard/sub-agents" class="sa-tab">Team</a>
+        <a href="/dashboard/sub-agents/prices" class="sa-tab active">Sub-agent prices</a>
+      </div>
+
+      <div class="pricing-info-bar">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Prices are in <strong>Ghana Cedis (GHS)</strong>. This is what your sub-agents <strong>pay you</strong> for each bundle, so it must be at or above your base price. The difference is <strong>your profit on every sale they make</strong>. Sub-agents then add their own margin on top when selling to customers.
+      </div>
+
+      <form id="pricing-form" data-endpoint="/dashboard/sub-agents/prices" novalidate>
+        {% set networks = [('mtn', 'MTN'), ('telecel', 'Telecel'), ('airteltigo', 'AirtelTigo')] %}
+        {% for net_key, net_label in networks %}
+          {% set net_bundles = bundles | selectattr('network', 'equalto', net_key) | list %}
+          {% if net_bundles %}
+          <div class="panel" style="margin-bottom:1.25rem">
+            <div class="panel-header">
+              <span class="panel-title">
+                <span class="net-badge net-{{ net_key }}" style="margin-right:.5rem">{{ net_label }}</span>
+                bundles
+              </span>
+            </div>
+            <div class="panel-body no-pad pricing-table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Bundle</th>
+                    <th>Validity</th>
+                    <th>Your base price</th>
+                    <th>Sub-agent price (GHS)</th>
+                    <th>Your profit / sale</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for b in net_bundles %}
+                  {% set cur = existing.get(b['id'], b['base_price_pesewas']) %}
+                  <tr>
+                    <td class="td-bold">
+                      {% if b['volume_mb'] >= 1000 %}{{ '%.0f'|format(b['volume_mb'] / 1000) }}GB{% else %}{{ b['volume_mb'] }}MB{% endif %}
+                      <span class="td-sm td-muted"> — {{ b['label'] }}</span>
+                    </td>
+                    <td>{{ b['validity_days'] }}d</td>
+                    <td class="td-muted">GHS {{ '%.2f'|format(b['base_price_pesewas'] / 100) }}</td>
+                    <td>
+                      <input type="number" class="price-input" name="{{ b['id'] }}"
+                             min="{{ '%.2f'|format(b['base_price_pesewas'] / 100) }}"
+                             step="0.01"
+                             value="{{ '%.2f'|format(cur / 100) }}"
+                             data-base="{{ b['base_price_pesewas'] }}" />
+                    </td>
+                    <td class="profit-cell" id="profit-{{ b['id'] }}">
+                      GHS {{ '%.2f'|format((cur - b['base_price_pesewas']) / 100) }}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
+
+        <div id="pricing-error" class="form-error hidden"></div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary btn-lg">Save all prices</button>
+          <span id="save-status" class="td-muted" style="font-size:.85rem;line-height:2.5"></span>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/pricing.js"></script>
+{% endblock %}

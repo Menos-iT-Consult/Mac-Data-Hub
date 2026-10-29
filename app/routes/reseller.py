@@ -6,6 +6,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from ..services.db import global_db, global_db_read, user_db, user_db_read
 from ..services.storage import upload_asset, delete_asset
 from ..services.paystack import create_transfer_recipient, initiate_transfer, resolve_account
+from ..services.pricing_chain import sub_agent_floors
 
 MOMO_BANK_CODES = {"mtn": "MTN", "telecel": "VOD", "airteltigo": "ATL"}
 
@@ -21,6 +22,17 @@ def reseller_required(f):
         if session.get("role") != "reseller":
             if request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest":
                 return jsonify({"error": "Session expired. Please log in again."}), 401
+            return redirect(url_for("auth.login"))
+
+        # Suspended or removed accounts are signed out on their next request
+        with global_db_read(current_app.config) as db:
+            acct = db.execute(
+                "SELECT is_suspended, removed_at FROM users WHERE id=?", (session.get("user_id"),)
+            ).fetchone()
+        if not acct or acct["removed_at"] or acct["is_suspended"]:
+            session.clear()
+            if request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                return jsonify({"error": "Your account is no longer active."}), 401
             return redirect(url_for("auth.login"))
         return f(*args, **kwargs)
     return decorated
@@ -164,6 +176,15 @@ def pricing():
             ).fetchall()
         }
 
+    # A sub-agent's "base price" is whatever their agent charges them
+    if user.get("parent_id"):
+        with global_db_read(config) as db:
+            floors = sub_agent_floors(db, user["parent_id"])
+        for b in bundles:
+            b["base_price_pesewas"] = max(floors.get(b["id"], b["base_price_pesewas"]), b["base_price_pesewas"])
+        existing = {k: max(v, next((b["base_price_pesewas"] for b in bundles if b["id"] == k), v))
+                    for k, v in existing.items()}
+
     if request.method == "POST":
         data = request.get_json()
         with global_db(config) as db:
@@ -295,6 +316,8 @@ def withdraw():
         minimum = int(min_row["value"]) if min_row else 10000
         fee_pct = float(fee_row["value"]) if fee_row else 0.0
 
+        if user["withdrawals_blocked"]:
+            return jsonify({"error": "Withdrawals are disabled on your account. Please contact the agent who manages you or support."}), 403
         if not user["payout_recipient_code"]:
             return jsonify({"error": "Set up your payout profile first before withdrawing."}), 400
         if amount_pesewas < minimum:

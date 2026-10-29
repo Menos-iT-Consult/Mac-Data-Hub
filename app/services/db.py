@@ -81,6 +81,15 @@ _MIGRATIONS = [
     # Referral programme: each reseller's shareable code + who referred them
     "ALTER TABLE users ADD COLUMN referral_code TEXT",
     "ALTER TABLE users ADD COLUMN referred_by TEXT",
+    # Sub-agents: an agent (parent_id NULL) can own sub-agents who get their own dashboard + store
+    "ALTER TABLE users ADD COLUMN parent_id TEXT",
+    "ALTER TABLE users ADD COLUMN is_suspended INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN withdrawals_blocked INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN removed_at TEXT",
+    "CREATE INDEX IF NOT EXISTS idx_users_parent ON users(parent_id)",
+    # Orders from a sub-agent's store: which agent gets a cut and how much
+    "ALTER TABLE orders ADD COLUMN agent_id TEXT",
+    "ALTER TABLE orders ADD COLUMN agent_profit_pesewas INTEGER NOT NULL DEFAULT 0",
 ]
 
 
