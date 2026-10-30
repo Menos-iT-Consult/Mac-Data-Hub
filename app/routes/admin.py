@@ -2,7 +2,7 @@ import uuid
 from functools import wraps
 from flask import (Blueprint, render_template, request, redirect,
                    url_for, session, current_app, jsonify)
-from ..services.db import global_db, global_db_read
+from ..services.db import global_db, global_db_read, user_db
 from ..services.push import broadcast_push
 from ..services.storage import upload_asset, delete_asset
 from ..services.gigzhub import get_offers, get_balance as gigzhub_get_balance
@@ -35,7 +35,7 @@ def dashboard():
     with global_db_read(config) as db:
         total_orders   = db.execute("SELECT COUNT(*) as c FROM orders").fetchone()["c"]
         total_revenue  = db.execute(
-            "SELECT COALESCE(SUM(amount_pesewas),0) as t FROM orders WHERE status='dispatched'"
+            "SELECT COALESCE(SUM(amount_pesewas),0) as t FROM orders WHERE status IN ('dispatched','completed')"
         ).fetchone()["t"]
         total_resellers = db.execute(
             "SELECT COUNT(*) as c FROM users WHERE role='reseller' AND is_active=1"
@@ -45,7 +45,7 @@ def dashboard():
         ).fetchone()["c"]
         today_revenue  = db.execute(
             "SELECT COALESCE(SUM(amount_pesewas),0) as t FROM orders "
-            "WHERE status='dispatched' AND date(created_at)=date('now')"
+            "WHERE status IN ('dispatched','completed') AND date(created_at)=date('now')"
         ).fetchone()["t"]
         today_orders   = db.execute(
             "SELECT COUNT(*) as c FROM orders WHERE date(created_at)=date('now')"
@@ -69,11 +69,11 @@ def dashboard():
                WHERE w.status='pending'
                ORDER BY w.created_at ASC LIMIT 5"""
         ).fetchall()
-        # Revenue by network (dispatched)
+        # Revenue by network (dispatched + completed)
         net_revenue = db.execute(
             """SELECT network, COUNT(*) as cnt,
                COALESCE(SUM(amount_pesewas),0) as rev
-               FROM orders WHERE status='dispatched'
+               FROM orders WHERE status IN ('dispatched','completed')
                GROUP BY network"""
         ).fetchall()
 
@@ -268,7 +268,7 @@ def network():
                       COALESCE(SUM(o.profit_pesewas),0) AS p,
                       COALESCE(SUM(o.agent_profit_pesewas),0) AS a
                FROM orders o JOIN stores st ON st.id = o.store_id
-               WHERE o.status='dispatched' GROUP BY st.user_id"""
+               WHERE o.status IN ('dispatched','completed') GROUP BY st.user_id"""
         ).fetchall()}
         ref_earned = {(r["referrer_id"], r["referred_id"]): r["t"] for r in db.execute(
             """SELECT referrer_id, referred_id, SUM(amount_pesewas) AS t
@@ -393,7 +393,9 @@ def orders():
         ).fetchall()
         counts = {
             "total":      db.execute("SELECT COUNT(*) as c FROM orders").fetchone()["c"],
+            "processing": db.execute("SELECT COUNT(*) as c FROM orders WHERE status='paid'").fetchone()["c"],
             "dispatched": db.execute("SELECT COUNT(*) as c FROM orders WHERE status='dispatched'").fetchone()["c"],
+            "completed":  db.execute("SELECT COUNT(*) as c FROM orders WHERE status='completed'").fetchone()["c"],
             "pending":    db.execute("SELECT COUNT(*) as c FROM orders WHERE status='pending'").fetchone()["c"],
             "failed":     db.execute("SELECT COUNT(*) as c FROM orders WHERE status='failed'").fetchone()["c"],
         }
@@ -463,6 +465,56 @@ def redispatch_order(order_id):
                 credit_agent_cut(config, db, order, (lbl["label"] if lbl else order["network"]))
 
     return jsonify({"ok": True, "gigzhub_id": gigzhub_id})
+
+
+def _mark_completed_in_user_db(config, order_ids_by_user: dict):
+    """Keep each reseller's personal order list in sync (best effort)."""
+    for uid, ids in order_ids_by_user.items():
+        try:
+            with user_db(config, uid) as udb:
+                udb.executemany("UPDATE orders SET status='completed' WHERE id=?",
+                                [(i,) for i in ids])
+        except Exception:
+            pass
+
+
+@admin_bp.route("/orders/<order_id>/complete", methods=["POST"])
+@admin_required
+def complete_order(order_id):
+    """Mark a dispatched order as completed (data confirmed delivered)."""
+    config = current_app.config
+    with global_db(config) as db:
+        order = db.execute(
+            "SELECT o.id, o.status, st.user_id AS owner FROM orders o "
+            "LEFT JOIN stores st ON st.id=o.store_id WHERE o.id=?", (order_id,)
+        ).fetchone()
+        if not order:
+            return jsonify({"ok": False, "error": "Order not found."}), 404
+        if order["status"] != "dispatched":
+            return jsonify({"ok": False, "error": f"Only dispatched orders can be completed (this one is '{order['status']}')."}), 400
+        db.execute("UPDATE orders SET status='completed' WHERE id=?", (order_id,))
+    if order["owner"]:
+        _mark_completed_in_user_db(config, {order["owner"]: [order_id]})
+    return jsonify({"ok": True})
+
+
+@admin_bp.route("/orders/complete-all", methods=["POST"])
+@admin_required
+def complete_all_orders():
+    """Mark every dispatched order as completed."""
+    config = current_app.config
+    by_user = {}
+    with global_db(config) as db:
+        rows = db.execute(
+            "SELECT o.id, st.user_id AS owner FROM orders o "
+            "LEFT JOIN stores st ON st.id=o.store_id WHERE o.status='dispatched'"
+        ).fetchall()
+        db.execute("UPDATE orders SET status='completed' WHERE status='dispatched'")
+        for r in rows:
+            if r["owner"]:
+                by_user.setdefault(r["owner"], []).append(r["id"])
+    _mark_completed_in_user_db(config, by_user)
+    return jsonify({"ok": True, "count": len(rows)})
 
 
 def _get_user_value(user, key, default=""):
@@ -746,42 +798,3 @@ def broadcast():
             )
     except Exception as exc:
         current_app.logger.exception("Broadcast DB error")
-        return jsonify({"ok": False, "error": str(exc)}), 500
-
-    # 2. Fire push notifications — best-effort, never blocks the response
-    sent = 0
-    try:
-        from ..services.push import _send_push_raw, _get_or_create_vapid, _build_claims
-        from pywebpush import WebPushException
-
-        vapid, _ = _get_or_create_vapid(config)
-        claims   = _build_claims(config)
-        icon     = "/static/icons/icon-192.png"
-
-        with global_db_read(config) as db:
-            subs = [dict(r) for r in db.execute(
-                """SELECT ps.id, ps.endpoint, ps.p256dh, ps.auth
-                   FROM push_subscriptions ps
-                   JOIN users u ON u.id = ps.user_id
-                   WHERE u.role='reseller' AND u.is_active=1"""
-            ).fetchall()]
-
-        stale_ids = []
-        for row in subs:
-            sub = {"endpoint": row["endpoint"], "keys": {"p256dh": row["p256dh"], "auth": row["auth"]}}
-            try:
-                _send_push_raw(vapid, claims, sub, title, body, "/dashboard", icon, notif_type="broadcast")
-                sent += 1
-            except WebPushException:
-                stale_ids.append(row["id"])
-            except Exception:
-                pass
-
-        if stale_ids:
-            with global_db(config) as db:
-                for sid in stale_ids:
-                    db.execute("DELETE FROM push_subscriptions WHERE id=?", (sid,))
-    except Exception:
-        current_app.logger.exception("Broadcast push error (non-fatal)")
-
-    return jsonify({"ok": True, "sent_to": sent})
