@@ -26,12 +26,29 @@ const priceValue   = document.getElementById('om-price-value');
 const errEl        = document.getElementById('om-error');
 const payBtn       = document.getElementById('om-pay-btn');
 const form         = document.getElementById('order-form');
+let currentNetwork = '';
+
+// MTN beneficiary verification
+const verifier = modal ? window.createBeneficiaryVerifier({
+  phoneEl: document.getElementById('om-phone'),
+  statusEl: document.getElementById('om-verify'),
+  getBundleId: () => pkgSelect.value,
+  getNetwork: () => currentNetwork,
+  onChange: syncPayBtn,
+}) : null;
+
+function syncPayBtn() {
+  if (!verifier) return;
+  const blocked = !verifier.isVerified();
+  payBtn.disabled = blocked;
+  payBtn.style.opacity = blocked ? '.55' : '';
+}
 
 // Wire up close/backdrop only when modal exists
 if (modal) {
   backdrop.addEventListener('click', closeOrderModal);
   closeBtn.addEventListener('click', closeOrderModal);
-  pkgSelect.addEventListener('change', updatePrice);
+  pkgSelect.addEventListener('change', () => { updatePrice(); verifier.recheck(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeOrderModal(); });
   form.addEventListener('submit', handleSubmit);
 }
@@ -40,6 +57,7 @@ function openOrderModal(network, title, preselectedId) {
   if (!modal) return;
 
   modalTitle.textContent = title;
+  currentNetwork = network;
 
   // Build package options for this network
   const nets = (window.BUNDLES || []).filter(b => b.network === network);
@@ -73,8 +91,9 @@ function openOrderModal(network, title, preselectedId) {
   }
 
   errEl.classList.add('hidden');
-  payBtn.disabled = false;
   payBtn.textContent = 'Proceed to Payment';
+  verifier.recheck();
+  syncPayBtn();
 
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
@@ -121,6 +140,11 @@ async function handleSubmit(e) {
     showErr('Please select a data package.');
     return;
   }
+  if (!verifier.isVerified()) {
+    showErr(verifier.isChecking() ? 'Please wait while we verify the number.'
+      : (verifier.message() || 'This number is not verified to receive MTN data.'));
+    return;
+  }
 
   payBtn.disabled = true;
   payBtn.textContent = 'Please wait…';
@@ -136,8 +160,8 @@ async function handleSubmit(e) {
     window.location.href = data.authorization_url;
   } catch (err) {
     showErr(err.message);
-    payBtn.disabled = false;
     payBtn.textContent = 'Proceed to Payment';
+    syncPayBtn();
   }
 }
 
