@@ -1,5 +1,5 @@
 // ── Cache version — bump this string to invalidate all caches on next deploy ──
-const VERSION = 'v7';
+const VERSION = 'v8';
 
 const STATIC_CACHE  = `mdh-static-${VERSION}`;
 const DYNAMIC_CACHE = `mdh-dynamic-${VERSION}`;
