@@ -59,11 +59,11 @@ def index():
                       u.is_suspended, u.withdrawals_blocked, u.created_at,
                       s.store_name, s.slug,
                       (SELECT COUNT(*) FROM orders o
-                        WHERE o.store_id = s.id AND o.status='dispatched') AS sales,
+                        WHERE o.store_id = s.id AND o.status IN ('dispatched','completed')) AS sales,
                       (SELECT COALESCE(SUM(o.profit_pesewas),0) FROM orders o
-                        WHERE o.store_id = s.id AND o.status='dispatched') AS profit,
+                        WHERE o.store_id = s.id AND o.status IN ('dispatched','completed')) AS profit,
                       (SELECT COALESCE(SUM(o.agent_profit_pesewas),0) FROM orders o
-                        WHERE o.store_id = s.id AND o.status='dispatched' AND o.agent_id = ?) AS my_cut
+                        WHERE o.store_id = s.id AND o.status IN ('dispatched','completed') AND o.agent_id = ?) AS my_cut
                FROM users u LEFT JOIN stores s ON s.user_id = u.id
                WHERE u.parent_id=? AND u.removed_at IS NULL
                ORDER BY u.created_at DESC""",
