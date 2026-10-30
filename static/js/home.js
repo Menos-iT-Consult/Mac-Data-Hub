@@ -29,7 +29,7 @@ const form         = document.getElementById('order-form');
 let currentNetwork = '';
 
 // MTN beneficiary verification
-const verifier = modal ? window.createBeneficiaryVerifier({
+const verifier = (modal && window.createBeneficiaryVerifier) ? window.createBeneficiaryVerifier({
   phoneEl: document.getElementById('om-phone'),
   statusEl: document.getElementById('om-verify'),
   getBundleId: () => pkgSelect.value,
@@ -48,7 +48,7 @@ function syncPayBtn() {
 if (modal) {
   backdrop.addEventListener('click', closeOrderModal);
   closeBtn.addEventListener('click', closeOrderModal);
-  pkgSelect.addEventListener('change', () => { updatePrice(); verifier.recheck(); });
+  pkgSelect.addEventListener('change', () => { updatePrice(); if (verifier) verifier.recheck(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeOrderModal(); });
   form.addEventListener('submit', handleSubmit);
 }
@@ -92,7 +92,7 @@ function openOrderModal(network, title, preselectedId) {
 
   errEl.classList.add('hidden');
   payBtn.textContent = 'Proceed to Payment';
-  verifier.recheck();
+  if (verifier) verifier.recheck();
   syncPayBtn();
 
   modal.classList.remove('hidden');
@@ -140,7 +140,7 @@ async function handleSubmit(e) {
     showErr('Please select a data package.');
     return;
   }
-  if (!verifier.isVerified()) {
+  if (verifier && !verifier.isVerified()) {
     showErr(verifier.isChecking() ? 'Please wait while we verify the number.'
       : (verifier.message() || 'This number is not verified to receive MTN data.'));
     return;
