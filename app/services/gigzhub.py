@@ -89,3 +89,33 @@ def dispatch_bundle(api_key: str, network: str, phone: str,
             f"GigzHub order failed (HTTP {resp.status_code}): {resp.text[:400]}"
         )
     return body
+
+
+def check_beneficiary(api_key: str, phone: str, offer_slug: str) -> dict:
+    """
+    POST /beneficiary-check  {"phone", "offerSlug"}
+    Returns {"eligible": bool, "message": str}.
+    Raises ValueError when the check itself could not be completed
+    (network error, GigzHub 5xx, unparseable response) so callers can fail closed.
+    """
+    try:
+        resp = requests.post(
+            f"{_base()}/beneficiary-check",
+            json={"phone": phone, "offerSlug": offer_slug},
+            headers=_headers(api_key), timeout=15,
+        )
+    except requests.RequestException as exc:
+        raise ValueError(f"Could not reach verification service: {exc}")
+    try:
+        body = resp.json()
+    except Exception:
+        raise ValueError(f"Verification service returned non-JSON (HTTP {resp.status_code})")
+    if resp.status_code >= 500:
+        raise ValueError(f"Verification service error (HTTP {resp.status_code})")
+
+    data = body.get("data") if isinstance(body.get("data"), dict) else {}
+    eligible = body.get("eligible", data.get("eligible"))
+    message = (body.get("message") or data.get("message")
+               or body.get("error") or data.get("reason") or "")
+    # Only an explicit eligible == true on a 2xx response counts as verified
+    return {"eligible": bool(resp.ok and eligible is True), "message": str(message)[:200]}
