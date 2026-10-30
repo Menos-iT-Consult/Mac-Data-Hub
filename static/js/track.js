@@ -9,10 +9,11 @@
   if (!form) return;
 
   var STATUS_LABELS = {
-    pending:    { label: "Pending",   cls: "status-pending"    },
-    paid:       { label: "Paid",      cls: "status-pending"    },
-    dispatched: { label: "Delivered", cls: "status-dispatched" },
-    failed:     { label: "Failed",    cls: "status-failed"     },
+    pending:    { label: "Awaiting payment", cls: "status-pending"    },
+    paid:       { label: "Processing",       cls: "status-processing" },
+    dispatched: { label: "Dispatched",       cls: "status-dispatched" },
+    completed:  { label: "Completed",        cls: "status-completed"  },
+    failed:     { label: "Failed",           cls: "status-failed"     },
   };
 
   function fmtDate(iso) {
