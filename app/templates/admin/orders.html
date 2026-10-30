@@ -14,7 +14,7 @@
       </button>
       <div class="topbar-title-wrap">
         <span class="topbar-title">All Orders</span>
-        <span class="topbar-subtitle">{{ counts.total }} total &middot; {{ counts.dispatched }} delivered</span>
+        <span class="topbar-subtitle">{{ counts.total }} total &middot; {{ counts.completed }} completed</span>
       </div>
       {% include "partials/topbar_actions.html" %}
     </div>
@@ -27,18 +27,26 @@
           <span class="count-pill-num">{{ counts.total }}</span>
           <span class="count-pill-label">All</span>
         </div>
-        <div class="count-pill count-pill-green">
-          <span class="count-pill-num">{{ counts.dispatched }}</span>
-          <span class="count-pill-label">Delivered</span>
-        </div>
         <div class="count-pill count-pill-yellow">
-          <span class="count-pill-num">{{ counts.pending }}</span>
-          <span class="count-pill-label">Pending</span>
+          <span class="count-pill-num">{{ counts.processing + counts.pending }}</span>
+          <span class="count-pill-label">Processing</span>
+        </div>
+        <div class="count-pill">
+          <span class="count-pill-num">{{ counts.dispatched }}</span>
+          <span class="count-pill-label">Dispatched</span>
+        </div>
+        <div class="count-pill count-pill-green">
+          <span class="count-pill-num">{{ counts.completed }}</span>
+          <span class="count-pill-label">Completed</span>
         </div>
         <div class="count-pill count-pill-red">
           <span class="count-pill-num">{{ counts.failed }}</span>
           <span class="count-pill-label">Failed</span>
         </div>
+      </div>
+
+      <div style="margin-bottom:.75rem">
+        <button class="btn btn-sm btn-outline" onclick="completeAll(this)">Mark all dispatched as completed</button>
       </div>
 
       <!-- Filter bar -->
@@ -55,9 +63,10 @@
         </select>
         <select class="filter-select" id="order-status-filter">
           <option value="">All status</option>
-          <option value="dispatched">Delivered</option>
-          <option value="pending">Pending</option>
-          <option value="paid">Paid</option>
+          <option value="pending">Awaiting payment</option>
+          <option value="paid">Processing</option>
+          <option value="dispatched">Dispatched</option>
+          <option value="completed">Completed</option>
           <option value="failed">Failed</option>
         </select>
       </div>
@@ -95,9 +104,9 @@
                 </td>
                 <td class="td-sm td-muted">{{ o['store_name'] or 'Direct' }}</td>
                 <td class="td-bold">GHS {{ '%.2f'|format(o['amount_pesewas'] / 100) }}</td>
-                <td class="td-muted">{% if o['status'] == 'dispatched' %}GHS {{ '%.2f'|format(o['profit_pesewas'] / 100) }}{% else %}—{% endif %}</td>
+                <td class="td-muted">{% if o['status'] in ('dispatched', 'completed') %}GHS {{ '%.2f'|format(o['profit_pesewas'] / 100) }}{% else %}—{% endif %}</td>
                 <td>
-                  <span class="status-pill status-{{ o['status'] }}">{{ o['status'] }}</span>
+                  <span class="status-pill status-{{ o['status'] }}">{{ {'pending':'Awaiting payment','paid':'Processing','dispatched':'Dispatched','completed':'Completed','failed':'Failed'}.get(o['status'], o['status']) }}</span>
                   {% if o['gigzhub_error'] %}
                   <div class="td-muted td-sm" style="margin-top:.25rem;max-width:160px;white-space:normal;color:#ef4444" title="{{ o['gigzhub_error'] }}">{{ o['gigzhub_error'][:60] }}{% if o['gigzhub_error']|length > 60 %}…{% endif %}</div>
                   {% endif %}
@@ -106,6 +115,9 @@
                 <td>
                   {% if o['status'] in ('failed', 'paid') %}
                   <button class="btn btn-sm btn-outline" onclick="redispatch('{{ o['id'] }}', this)">Retry</button>
+                  {% endif %}
+                  {% if o['status'] == 'dispatched' %}
+                  <button class="btn btn-sm btn-outline" onclick="completeOrder('{{ o['id'] }}', this)">Mark completed</button>
                   {% endif %}
                 </td>
               </tr>
@@ -162,7 +174,8 @@
       const row = document.getElementById(`order-row-${orderId}`);
       if (row) {
         row.querySelector('.status-pill').className = 'status-pill status-dispatched';
-        row.querySelector('.status-pill').textContent = 'dispatched';
+        row.dataset.status = 'dispatched';
+        row.querySelector('.status-pill').textContent = 'Dispatched';
         const errDiv = row.querySelector('[style*="ef4444"]');
         if (errDiv) errDiv.remove();
         btn.remove();
@@ -171,6 +184,38 @@
       alert('Retry failed: ' + err.message);
       btn.disabled = false;
       btn.textContent = orig;
+    }
+  }
+
+  async function completeOrder(orderId, btn) {
+    btn.disabled = true;
+    try {
+      const resp = await fetch(`/admin/orders/${orderId}/complete`, { method: 'POST' });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) throw new Error(data.error || 'Failed.');
+      const row = document.getElementById(`order-row-${orderId}`);
+      const pill = row.querySelector('.status-pill');
+      pill.className = 'status-pill status-completed';
+      pill.textContent = 'Completed';
+      row.dataset.status = 'completed';
+      btn.remove();
+    } catch (err) {
+      alert('Could not complete order: ' + err.message);
+      btn.disabled = false;
+    }
+  }
+
+  async function completeAll(btn) {
+    if (!confirm('Mark ALL dispatched orders as completed?')) return;
+    btn.disabled = true;
+    try {
+      const resp = await fetch('/admin/orders/complete-all', { method: 'POST' });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) throw new Error(data.error || 'Failed.');
+      location.reload();
+    } catch (err) {
+      alert('Failed: ' + err.message);
+      btn.disabled = false;
     }
   }
 </script>
