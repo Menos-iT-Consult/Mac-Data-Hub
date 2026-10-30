@@ -32,7 +32,7 @@ def create_app():
             _conn.row_factory = _sqlite3.Row
             _rows = _conn.execute(
                 "SELECT key, value FROM app_settings WHERE key IN "
-                "('paystack_secret_key','paystack_public_key','gigzhub_api_key','gigzhub_base_url')"
+                "('paystack_secret_key','paystack_public_key','gigzhub_api_key','gigzhub_base_url','gigzhub_status_path')"
             ).fetchall()
             _conn.close()
             _overrides = {r["key"]: r["value"] for r in _rows}
@@ -42,6 +42,8 @@ def create_app():
                 app.config["PAYSTACK_PUBLIC_KEY"] = _overrides["paystack_public_key"]
             if _overrides.get("gigzhub_api_key"):
                 app.config["GIGZHUB_API_KEY"] = _overrides["gigzhub_api_key"]
+            if _overrides.get("gigzhub_status_path"):
+                app.config["GIGZHUB_STATUS_PATH"] = _overrides["gigzhub_status_path"]
             if _overrides.get("gigzhub_base_url"):
                 app.config["GIGZHUB_BASE_URL"] = _overrides["gigzhub_base_url"].rstrip("/").removesuffix("/offers")
     except Exception:
@@ -141,5 +143,8 @@ def create_app():
     app.register_blueprint(admin_bp)
     app.register_blueprint(webhook_bp)
     app.register_blueprint(push_bp)
+
+    from .services.order_sync import start_background_sync
+    start_background_sync(app)
 
     return app

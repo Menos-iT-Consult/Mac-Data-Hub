@@ -118,7 +118,7 @@
                 <td><span class="net-badge net-{{ o['network'] }}">{{ o['network']|upper }}</span></td>
                 <td>{{ o['customer_phone'] }}</td>
                 <td class="td-bold" style="color:var(--green)">GHS {{ '%.2f'|format(o['profit_pesewas'] / 100) }}</td>
-                <td><span class="status-pill status-{{ o['status'] }}">{{ {'pending':'Awaiting payment','paid':'Processing','dispatched':'Dispatched','completed':'Completed','failed':'Failed'}.get(o['status'], o['status']) }}</span></td>
+                <td><span class="status-pill status-{{ o['status'] }}">{{ {'pending':'Awaiting payment','paid':'Processing','processing':'Processing','dispatched':'Dispatched','completed':'Completed','failed':'Failed'}.get(o['status'], o['status']) }}</span></td>
                 <td class="td-date">{{ o['created_at'][:10] }}</td>
               </tr>
               {% endfor %}

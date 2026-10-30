@@ -90,6 +90,9 @@ _MIGRATIONS = [
     # Orders from a sub-agent's store: which agent gets a cut and how much
     "ALTER TABLE orders ADD COLUMN agent_id TEXT",
     "ALTER TABLE orders ADD COLUMN agent_profit_pesewas INTEGER NOT NULL DEFAULT 0",
+    # Live GigzHub status tracking (raw word from GigzHub + when we last checked)
+    "ALTER TABLE orders ADD COLUMN gigzhub_status TEXT",
+    "ALTER TABLE orders ADD COLUMN status_checked_at TEXT",
 ]
 
 

@@ -7,6 +7,8 @@ from ..services.push import broadcast_push
 from ..services.storage import upload_asset, delete_asset
 from ..services.gigzhub import get_offers, get_balance as gigzhub_get_balance
 from ..services.paystack import create_transfer_recipient
+from ..services.referrals import credit_referral
+from ..services.order_sync import ensure_mirror, sync_once
 from ..services.team import (credit_agent_cut, toggle_flag, reset_password as _reset_pw,
                              remove_sub_agent)
 ALLOWED_LOGO_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
@@ -35,7 +37,7 @@ def dashboard():
     with global_db_read(config) as db:
         total_orders   = db.execute("SELECT COUNT(*) as c FROM orders").fetchone()["c"]
         total_revenue  = db.execute(
-            "SELECT COALESCE(SUM(amount_pesewas),0) as t FROM orders WHERE status IN ('dispatched','completed')"
+            "SELECT COALESCE(SUM(amount_pesewas),0) as t FROM orders WHERE status IN ('dispatched','processing','completed')"
         ).fetchone()["t"]
         total_resellers = db.execute(
             "SELECT COUNT(*) as c FROM users WHERE role='reseller' AND is_active=1"
@@ -45,7 +47,7 @@ def dashboard():
         ).fetchone()["c"]
         today_revenue  = db.execute(
             "SELECT COALESCE(SUM(amount_pesewas),0) as t FROM orders "
-            "WHERE status IN ('dispatched','completed') AND date(created_at)=date('now')"
+            "WHERE status IN ('dispatched','processing','completed') AND date(created_at)=date('now')"
         ).fetchone()["t"]
         today_orders   = db.execute(
             "SELECT COUNT(*) as c FROM orders WHERE date(created_at)=date('now')"
@@ -73,7 +75,7 @@ def dashboard():
         net_revenue = db.execute(
             """SELECT network, COUNT(*) as cnt,
                COALESCE(SUM(amount_pesewas),0) as rev
-               FROM orders WHERE status IN ('dispatched','completed')
+               FROM orders WHERE status IN ('dispatched','processing','completed')
                GROUP BY network"""
         ).fetchall()
 
@@ -268,7 +270,7 @@ def network():
                       COALESCE(SUM(o.profit_pesewas),0) AS p,
                       COALESCE(SUM(o.agent_profit_pesewas),0) AS a
                FROM orders o JOIN stores st ON st.id = o.store_id
-               WHERE o.status IN ('dispatched','completed') GROUP BY st.user_id"""
+               WHERE o.status IN ('dispatched','processing','completed') GROUP BY st.user_id"""
         ).fetchall()}
         ref_earned = {(r["referrer_id"], r["referred_id"]): r["t"] for r in db.execute(
             """SELECT referrer_id, referred_id, SUM(amount_pesewas) AS t
@@ -393,7 +395,7 @@ def orders():
         ).fetchall()
         counts = {
             "total":      db.execute("SELECT COUNT(*) as c FROM orders").fetchone()["c"],
-            "processing": db.execute("SELECT COUNT(*) as c FROM orders WHERE status='paid'").fetchone()["c"],
+            "processing": db.execute("SELECT COUNT(*) as c FROM orders WHERE status IN ('paid','processing')").fetchone()["c"],
             "dispatched": db.execute("SELECT COUNT(*) as c FROM orders WHERE status='dispatched'").fetchone()["c"],
             "completed":  db.execute("SELECT COUNT(*) as c FROM orders WHERE status='completed'").fetchone()["c"],
             "pending":    db.execute("SELECT COUNT(*) as c FROM orders WHERE status='pending'").fetchone()["c"],
@@ -444,14 +446,15 @@ def redispatch_order(order_id):
         gigzhub_error = str(exc)[:500]
         return jsonify({"ok": False, "error": gigzhub_error}), 502
 
+    mirror_owner = mirror_label = None
     with global_db(config) as db:
         db.execute(
-            "UPDATE orders SET status=?, gigzhub_order_id=?, gigzhub_error=NULL WHERE id=?",
+            "UPDATE orders SET status=?, gigzhub_order_id=?, gigzhub_error=NULL, gigzhub_status=NULL WHERE id=?",
             (status, gigzhub_id, order_id)
         )
-        # Only credit profit if the order was previously failed (not yet credited).
-        # If it was already dispatched once, profit was already credited by the webhook.
-        if order["store_id"] and order["status"] == "failed":
+        # Credits exist only for dispatched/processing/completed orders (a GigzHub-side
+        # failure reverses them), so a retry of a failed/paid order credits them afresh.
+        if order["store_id"] and order["status"] in ("failed", "paid"):
             store = db.execute(
                 "SELECT user_id FROM stores WHERE id=?", (order["store_id"],)
             ).fetchone()
@@ -462,9 +465,42 @@ def redispatch_order(order_id):
                         (order["profit_pesewas"], store["user_id"])
                     )
                 lbl = db.execute("SELECT label FROM data_bundles WHERE id=?", (order["bundle_id"],)).fetchone()
-                credit_agent_cut(config, db, order, (lbl["label"] if lbl else order["network"]))
+                label = lbl["label"] if lbl else order["network"]
+                credit_agent_cut(config, db, order, label)
+                try:
+                    credit_referral(config, db, order)
+                except Exception:
+                    pass
+                mirror_owner = store["user_id"]
+                mirror_label = label
+
+    if mirror_owner:
+        try:
+            ensure_mirror(config, mirror_owner, order, mirror_label)
+        except Exception:
+            pass
 
     return jsonify({"ok": True, "gigzhub_id": gigzhub_id})
+
+
+@admin_bp.route("/orders/sync", methods=["POST"])
+@admin_required
+def sync_orders_now():
+    """Ask GigzHub about every in-flight order right now (the background job does this
+    automatically; this button is for impatience and for diagnosing the status path)."""
+    res = sync_once(current_app.config, limit=100)
+    return jsonify({"ok": True, **res})
+
+
+@admin_bp.route("/orders/statuses")
+@admin_required
+def order_statuses():
+    """Lightweight poll used by the Orders page to refresh pills without a reload."""
+    with global_db_read(current_app.config) as db:
+        rows = db.execute(
+            "SELECT id, status, gigzhub_status FROM orders ORDER BY created_at DESC LIMIT 1000"
+        ).fetchall()
+    return jsonify({"statuses": {r["id"]: r["status"] for r in rows}})
 
 
 def _mark_completed_in_user_db(config, order_ids_by_user: dict):
@@ -490,8 +526,8 @@ def complete_order(order_id):
         ).fetchone()
         if not order:
             return jsonify({"ok": False, "error": "Order not found."}), 404
-        if order["status"] != "dispatched":
-            return jsonify({"ok": False, "error": f"Only dispatched orders can be completed (this one is '{order['status']}')."}), 400
+        if order["status"] not in ("dispatched", "processing"):
+            return jsonify({"ok": False, "error": f"Only in-flight orders can be completed (this one is '{order['status']}')."}), 400
         db.execute("UPDATE orders SET status='completed' WHERE id=?", (order_id,))
     if order["owner"]:
         _mark_completed_in_user_db(config, {order["owner"]: [order_id]})
@@ -507,9 +543,9 @@ def complete_all_orders():
     with global_db(config) as db:
         rows = db.execute(
             "SELECT o.id, st.user_id AS owner FROM orders o "
-            "LEFT JOIN stores st ON st.id=o.store_id WHERE o.status='dispatched'"
+            "LEFT JOIN stores st ON st.id=o.store_id WHERE o.status IN ('dispatched','processing')"
         ).fetchall()
-        db.execute("UPDATE orders SET status='completed' WHERE status='dispatched'")
+        db.execute("UPDATE orders SET status='completed' WHERE status IN ('dispatched','processing')")
         for r in rows:
             if r["owner"]:
                 by_user.setdefault(r["owner"], []).append(r["id"])

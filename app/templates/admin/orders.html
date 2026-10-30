@@ -28,7 +28,11 @@
           <span class="count-pill-label">All</span>
         </div>
         <div class="count-pill count-pill-yellow">
-          <span class="count-pill-num">{{ counts.processing + counts.pending }}</span>
+          <span class="count-pill-num">{{ counts.pending }}</span>
+          <span class="count-pill-label">Pending</span>
+        </div>
+        <div class="count-pill">
+          <span class="count-pill-num">{{ counts.processing }}</span>
           <span class="count-pill-label">Processing</span>
         </div>
         <div class="count-pill">
@@ -46,7 +50,8 @@
       </div>
 
       <div style="margin-bottom:.75rem">
-        <button class="btn btn-sm btn-outline" onclick="completeAll(this)">Mark all dispatched as completed</button>
+        <button class="btn btn-sm btn-outline" onclick="syncNow(this)">Check GigzHub now</button>
+        <span class="td-muted td-sm" style="margin-left:.5rem">Statuses update automatically from GigzHub.</span>
       </div>
 
       <!-- Filter bar -->
@@ -64,7 +69,7 @@
         <select class="filter-select" id="order-status-filter">
           <option value="">All status</option>
           <option value="pending">Awaiting payment</option>
-          <option value="paid">Processing</option>
+          <option value="processing">Processing</option>
           <option value="dispatched">Dispatched</option>
           <option value="completed">Completed</option>
           <option value="failed">Failed</option>
@@ -74,7 +79,7 @@
       {% if orders %}
       <div class="panel">
         <div class="panel-body no-pad tbl-wrap tbl-admin-orders">
-          <table class="data-table" id="orders-table">
+          <table class="data-table" id="orders-table" data-status-url="/admin/orders/statuses">
             <thead>
               <tr>
                 <th>Reference</th>
@@ -91,7 +96,7 @@
             </thead>
             <tbody>
               {% for o in orders %}
-              <tr data-net="{{ o['network'] }}" data-status="{{ o['status'] }}" id="order-row-{{ o['id'] }}">
+              <tr data-net="{{ o['network'] }}" data-status="{{ o['status'] }}" id="order-row-{{ o['id'] }}" data-order-id="{{ o['id'] }}">
                 <td><code class="ref-code">{{ o['paystack_reference'] or '—' }}</code></td>
                 <td>
                   <div class="td-bold">{{ o['customer_phone'] }}</div>
@@ -104,21 +109,16 @@
                 </td>
                 <td class="td-sm td-muted">{{ o['store_name'] or 'Direct' }}</td>
                 <td class="td-bold">GHS {{ '%.2f'|format(o['amount_pesewas'] / 100) }}</td>
-                <td class="td-muted">{% if o['status'] in ('dispatched', 'completed') %}GHS {{ '%.2f'|format(o['profit_pesewas'] / 100) }}{% else %}—{% endif %}</td>
+                <td class="td-muted">{% if o['status'] in ('dispatched', 'processing', 'completed') %}GHS {{ '%.2f'|format(o['profit_pesewas'] / 100) }}{% else %}—{% endif %}</td>
                 <td>
-                  <span class="status-pill status-{{ o['status'] }}">{{ {'pending':'Awaiting payment','paid':'Processing','dispatched':'Dispatched','completed':'Completed','failed':'Failed'}.get(o['status'], o['status']) }}</span>
+                  <span class="status-pill status-{{ o['status'] }}"{% if o['gigzhub_status'] %} title="GigzHub says: {{ o['gigzhub_status'] }}"{% endif %}>{{ {'pending':'Awaiting payment','paid':'Processing','processing':'Processing','dispatched':'Dispatched','completed':'Completed','failed':'Failed'}.get(o['status'], o['status']) }}</span>
                   {% if o['gigzhub_error'] %}
                   <div class="td-muted td-sm" style="margin-top:.25rem;max-width:160px;white-space:normal;color:#ef4444" title="{{ o['gigzhub_error'] }}">{{ o['gigzhub_error'][:60] }}{% if o['gigzhub_error']|length > 60 %}…{% endif %}</div>
                   {% endif %}
                 </td>
                 <td class="td-date">{{ o['created_at'][:10] }}</td>
                 <td>
-                  {% if o['status'] in ('failed', 'paid') %}
-                  <button class="btn btn-sm btn-outline" onclick="redispatch('{{ o['id'] }}', this)">Retry</button>
-                  {% endif %}
-                  {% if o['status'] == 'dispatched' %}
-                  <button class="btn btn-sm btn-outline" onclick="completeOrder('{{ o['id'] }}', this)">Mark completed</button>
-                  {% endif %}
+                  <button class="btn btn-sm btn-outline retry-btn" onclick="redispatch('{{ o['id'] }}', this)"{% if o['status'] not in ('failed', 'paid') %} style="display:none"{% endif %}>Retry</button>
                 </td>
               </tr>
               {% endfor %}
@@ -140,6 +140,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/live_status.js"></script>
 <script>
   const searchEl    = document.getElementById('order-search');
   const netSel      = document.getElementById('order-net-filter');
@@ -155,7 +156,7 @@
       tr.style.display =
         (!q || text.includes(q)) &&
         (!n || trNet === n) &&
-        (!s || trStat === s) ? '' : 'none';
+        (!s || (trStat === 'paid' ? 'processing' : trStat) === s) ? '' : 'none';
     });
   }
   searchEl?.addEventListener('input', applyFilters);
@@ -187,35 +188,24 @@
     }
   }
 
-  async function completeOrder(orderId, btn) {
+  async function syncNow(btn) {
+    const orig = btn.textContent;
     btn.disabled = true;
+    btn.textContent = 'Checking…';
     try {
-      const resp = await fetch(`/admin/orders/${orderId}/complete`, { method: 'POST' });
-      const data = await resp.json();
-      if (!resp.ok || !data.ok) throw new Error(data.error || 'Failed.');
-      const row = document.getElementById(`order-row-${orderId}`);
-      const pill = row.querySelector('.status-pill');
-      pill.className = 'status-pill status-completed';
-      pill.textContent = 'Completed';
-      row.dataset.status = 'completed';
-      btn.remove();
+      const resp = await fetch('/admin/orders/sync', { method: 'POST' });
+      const d = await resp.json();
+      if (!resp.ok || !d.ok) throw new Error(d.error || 'Failed.');
+      let msg = `Checked ${d.checked} order(s): ${d.changed} updated, ${d.failed} failed.`;
+      if (d.unmapped) msg += `\n${d.unmapped} had a status word the app does not recognise (hover the status pill to see it).`;
+      if (d.errors && d.errors.length) msg += `\n\nGigzHub lookup problems:\n- ` + d.errors.join('\n- ');
+      alert(msg);
+      if (d.changed) location.reload();
     } catch (err) {
-      alert('Could not complete order: ' + err.message);
+      alert('Could not check GigzHub: ' + err.message);
+    } finally {
       btn.disabled = false;
-    }
-  }
-
-  async function completeAll(btn) {
-    if (!confirm('Mark ALL dispatched orders as completed?')) return;
-    btn.disabled = true;
-    try {
-      const resp = await fetch('/admin/orders/complete-all', { method: 'POST' });
-      const data = await resp.json();
-      if (!resp.ok || !data.ok) throw new Error(data.error || 'Failed.');
-      location.reload();
-    } catch (err) {
-      alert('Failed: ' + err.message);
-      btn.disabled = false;
+      btn.textContent = orig;
     }
   }
 </script>

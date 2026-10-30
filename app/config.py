@@ -20,6 +20,11 @@ class Config:
     # GigzHub
     GIGZHUB_API_KEY = os.environ["GIGZHUB_API_KEY"]
     GIGZHUB_BASE_URL = "https://gigzhub.net/api/v1"
+    # Path used to look up one order's live status; {id} = GigzHub's order id.
+    # Matches GigzHub's documented GET /api/v1/order/status/:orderIdOrReference
+    GIGZHUB_STATUS_PATH = os.getenv("GIGZHUB_STATUS_PATH", "/order/status/{id}")
+    # Seconds between automatic status checks (0 turns the background sync off)
+    ORDER_SYNC_INTERVAL = int(os.getenv("ORDER_SYNC_INTERVAL", "60"))
 
     # Cloudflare R2 — private bucket (databases)
     R2_ACCOUNT_ID        = os.environ["R2_ACCOUNT_ID"]

@@ -7,6 +7,7 @@ from ..services.db import global_db, global_db_read, user_db, user_db_read
 from ..services.storage import upload_asset, delete_asset
 from ..services.paystack import create_transfer_recipient, initiate_transfer, resolve_account
 from ..services.pricing_chain import sub_agent_floors
+from ..services.order_sync import overlay_status
 
 MOMO_BANK_CODES = {"mtn": "MTN", "telecel": "VOD", "airteltigo": "ATL"}
 
@@ -56,7 +57,7 @@ def dashboard():
     recent_orders, total_earned, total_orders = [], 0, 0
     with user_db_read(config, uid) as udb:
         rows = udb.execute("SELECT * FROM orders ORDER BY created_at DESC LIMIT 10").fetchall()
-        recent_orders = [dict(r) for r in rows]
+        recent_orders = overlay_status(config, [dict(r) for r in rows])
         row = udb.execute("SELECT COALESCE(SUM(amount_pesewas),0) AS t FROM earnings").fetchone()
         total_earned = row["t"] if row else 0
         cnt = udb.execute("SELECT COUNT(*) as c FROM orders").fetchone()
@@ -152,7 +153,18 @@ def orders():
 
     return render_template("reseller/orders.html",
                            user=user, store=store,
-                           orders=[dict(r) for r in rows])
+                           orders=overlay_status(config, [dict(r) for r in rows]))
+
+
+@reseller_bp.route("/orders/statuses")
+@reseller_required
+def order_statuses():
+    """Live statuses for this agent / sub-agent's own orders (polled by the page)."""
+    config = current_app.config
+    with user_db_read(config, session["user_id"]) as udb:
+        rows = udb.execute("SELECT id, status FROM orders ORDER BY created_at DESC LIMIT 500").fetchall()
+    rows = overlay_status(config, [dict(r) for r in rows])
+    return jsonify({"statuses": {r["id"]: r["status"] for r in rows}})
 
 
 @reseller_bp.route("/pricing", methods=["GET", "POST"])

@@ -2,7 +2,9 @@ import uuid
 from flask import Blueprint, request, jsonify, current_app
 from ..services.db import global_db, user_db
 from ..services.paystack import verify_webhook_signature
-from ..services.gigzhub import dispatch_bundle
+import hmac
+from ..services.gigzhub import dispatch_bundle, webhook_token
+from ..services.order_sync import apply_webhook
 from ..services.push import broadcast_push
 from ..services.referrals import credit_referral
 from ..services.team import credit_agent_cut
@@ -41,6 +43,24 @@ def paystack_webhook():
 
     # --- Bundle order payment ---
     _handle_order(config, reference, metadata)
+    return jsonify({"ok": True}), 200
+
+
+@webhook_bp.route("/webhook/gigzhub", methods=["POST"])
+def gigzhub_webhook():
+    """GigzHub calls this on every order status change (pending/processing/delivered/failed/...).
+    Authenticated by the secret token embedded in the webhookUrl we send with each order."""
+    if not hmac.compare_digest(request.args.get("token", ""), webhook_token()):
+        return jsonify({"error": "Invalid token"}), 401
+    data = request.get_json(silent=True) or {}
+    # Always answer 200 quickly once authenticated, even for orders we don't know,
+    # so GigzHub doesn't keep retrying.
+    try:
+        apply_webhook(current_app.config,
+                      [data.get("orderId"), data.get("reference")],
+                      data.get("status"))
+    except Exception:
+        current_app.logger.exception("GigzHub webhook processing failed")
     return jsonify({"ok": True}), 200
 
 
