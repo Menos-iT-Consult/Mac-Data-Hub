@@ -1,9 +1,10 @@
+import re
 import uuid
 from flask import Blueprint, render_template, request, jsonify, current_app, redirect, url_for, send_from_directory
 import os
 from ..services.db import global_db, global_db_read, user_db
 from ..services.paystack import initialize_transaction, verify_transaction, add_paystack_charge
-from ..services.gigzhub import dispatch_bundle
+from ..services.gigzhub import dispatch_bundle, check_beneficiary
 from ..services.push import broadcast_push
 from ..services.referrals import credit_referral
 from ..services.pricing_chain import resolve_store_price, sub_agent_floors
@@ -20,6 +21,41 @@ def _store_unavailable(db, store) -> bool:
         "SELECT is_suspended, removed_at FROM users WHERE id=?", (store["user_id"],)
     ).fetchone()
     return bool(owner and (owner["is_suspended"] or owner["removed_at"]))
+
+
+NOT_VERIFIED_MSG = "This number is not verified to receive MTN data. Please use a different number."
+
+
+def _verify_mtn_recipient(config, bundle, phone: str):
+    """
+    Returns (ok, message, http_status). Only MTN bundles are checked;
+    other networks always pass. Fails closed if the check cannot be completed.
+    """
+    if (bundle["network"] or "").lower() != "mtn":
+        return True, "", 200
+    try:
+        result = check_beneficiary(config["GIGZHUB_API_KEY"], phone, bundle["offer_slug"])
+    except ValueError:
+        return False, "We couldn't verify this number right now. Please try again in a moment.", 503
+    if not result["eligible"]:
+        return False, NOT_VERIFIED_MSG, 200
+    return True, "", 200
+
+
+@public_bp.route("/check-beneficiary", methods=["POST"])
+def check_beneficiary_route():
+    config = current_app.config
+    data = request.get_json(silent=True) or {}
+    phone = str(data.get("phone", "")).strip()
+    bundle_id = data.get("bundle_id")
+    if not re.fullmatch(r"0[235]\d{8}", phone):
+        return jsonify({"verified": False, "error": "Enter a valid 10-digit Ghana mobile number."}), 400
+    with global_db_read(config) as db:
+        bundle = db.execute("SELECT * FROM data_bundles WHERE id=?", (bundle_id,)).fetchone()
+    if not bundle:
+        return jsonify({"verified": False, "error": "Bundle not found."}), 404
+    ok, msg, status = _verify_mtn_recipient(config, bundle, phone)
+    return jsonify({"verified": ok, "error": msg if not ok else ""}), status
 
 
 @public_bp.route("/.well-known/assetlinks.json")
@@ -185,6 +221,15 @@ def checkout():
     store_id = data.get("store_id")
     phone = data.get("phone", "").strip()
     email = data.get("email", "").strip()
+
+    # MTN: server-side beneficiary verification (before taking the DB write lock)
+    with global_db_read(config) as rdb:
+        pre_bundle = rdb.execute("SELECT * FROM data_bundles WHERE id=?", (bundle_id,)).fetchone()
+    if not pre_bundle:
+        return jsonify({"error": "Bundle not found."}), 404
+    ok, msg, status = _verify_mtn_recipient(config, pre_bundle, phone)
+    if not ok:
+        return jsonify({"error": msg}), (403 if status == 200 else status)
 
     with global_db(config) as db:
         bundle = db.execute("SELECT * FROM data_bundles WHERE id=?", (bundle_id,)).fetchone()
