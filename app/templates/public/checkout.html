@@ -20,6 +20,7 @@
 
         <form id="checkout-form" novalidate>
           <input type="hidden" id="bundle-id" value="{{ bundle['id'] }}" />
+          <input type="hidden" id="bundle-network" value="{{ bundle['network'] }}" />
           <input type="hidden" id="store-id" value="{{ store['id'] if store else '' }}" />
 
           <div class="form-section">
@@ -38,6 +39,7 @@
                        maxlength="10" autocomplete="tel" required />
               </div>
               <span class="field-hint">This number will receive the data bundle.</span>
+              <div id="verify-status" class="verify-status hidden" role="status" aria-live="polite"></div>
             </div>
 
             <div class="field">
@@ -125,5 +127,6 @@
 <script>
   window.PAYSTACK_PUBLIC_KEY = "{{ config['PAYSTACK_PUBLIC_KEY'] }}";
 </script>
+<script src="/static/js/beneficiary.js"></script>
 <script src="/static/js/checkout.js"></script>
 {% endblock %}
