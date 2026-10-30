@@ -110,6 +110,7 @@
       <div class="field">
         <label for="om-phone">Beneficiary Number</label>
         <input type="tel" id="om-phone" name="phone" placeholder="e.g. 054xxxxxxx" maxlength="10" autocomplete="tel" required />
+        <div id="om-verify" class="verify-status hidden" role="status" aria-live="polite"></div>
       </div>
       <div class="field">
         <label for="om-email">Email (for receipt)</label>
@@ -158,6 +159,7 @@ window.PAYSTACK_PUBLIC_KEY = "{{ config['PAYSTACK_PUBLIC_KEY'] }}";
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/beneficiary.js"></script>
 <script src="/static/js/home.js"></script>
 <script src="/static/js/track.js"></script>
 <script src="{{ static_v('js/help-fab.js') }}"></script>
