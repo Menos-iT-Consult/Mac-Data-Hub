@@ -834,3 +834,16 @@ def broadcast():
             )
     except Exception as exc:
         current_app.logger.exception("Broadcast DB error")
+        return jsonify({"ok": False, "error": "Could not save the broadcast. Please try again."}), 500
+
+    # 2. Push to every reseller device that has notifications enabled.
+    #    The broadcast is already saved (bell notification works), so a push
+    #    failure must never turn into a server error for the admin.
+    sent_to = 0
+    try:
+        from ..services.push import broadcast_push_to_resellers
+        sent_to = broadcast_push_to_resellers(config, title, body, "/dashboard")
+    except Exception:
+        current_app.logger.exception("Broadcast push error")
+
+    return jsonify({"ok": True, "sent_to": sent_to})
