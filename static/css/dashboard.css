@@ -965,10 +965,11 @@
   .filter-bar    { flex-direction: column; gap: .5rem; }
   .search-wrap   { min-width: 0; width: 100%; }
   .filter-select { width: 100%; }
-  .count-pills   { gap: .5rem; }
-  .count-pill    { min-width: 0; flex: 1; padding: .5rem .6rem; }
-  .count-pill-num   { font-size: 1.1rem; }
-  .count-pill-label { font-size: .58rem; }
+  /* 3 x 2 grid so every label (Processing, Dispatched…) fits without clipping */
+  .count-pills   { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+  .count-pill    { min-width: 0; width: 100%; padding: .6rem .35rem; text-align: center; }
+  .count-pill-num   { font-size: 1.15rem; }
+  .count-pill-label { font-size: .6rem; letter-spacing: .03em; max-width: 100%; white-space: nowrap; }
   .stat-grid      { grid-template-columns: 1fr 1fr; gap: .75rem; }
   .stat-card      { padding: 1rem; }
   .stat-card-value{ font-size: 1.35rem; }
@@ -1042,3 +1043,14 @@
 [data-theme="dark"] .status-dispatched { color: #c4b5fd; }
 [data-theme="dark"] .status-completed  { color: #86efac; }
 [data-theme="dark"] .status-failed     { color: #fca5a5; }
+/* ── Broadcast form (admin settings) ─────────────────────── */
+#broadcast-form textarea { width: 100%; min-height: 110px; box-sizing: border-box; }
+#broadcast-form .form-error,
+#broadcast-form .form-success { margin-top: .85rem; line-height: 1.45; word-break: break-word; }
+@media (max-width: 640px) {
+  #broadcast-form .settings-grid { gap: 1.1rem; }
+  #broadcast-form .form-actions { display: block; }
+  #broadcast-form #broadcast-btn {
+    width: 100%; justify-content: center; padding: .85rem 1rem; font-size: .95rem;
+  }
+}
