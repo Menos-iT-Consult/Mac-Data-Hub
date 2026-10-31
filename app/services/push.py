@@ -141,3 +141,42 @@ def broadcast_push(config, user_id: str | None, title: str, body: str,
         with global_db(config) as db:
             for sid in stale_ids:
                 db.execute("DELETE FROM push_subscriptions WHERE id=?", (sid,))
+
+
+def broadcast_push_to_resellers(config, title: str, body: str, url: str = "/dashboard") -> int:
+    """Send a push to every device subscribed by a reseller account.
+
+    Never raises: one bad subscription (or push-service outage) must not break
+    the admin broadcast. Returns the number of devices successfully notified.
+    """
+    try:
+        vapid, _ = _get_or_create_vapid(config)
+    except Exception:
+        return 0
+    claims = _build_claims(config)
+    icon = "/static/icons/icon-192.png"
+
+    with global_db(config) as db:
+        rows = db.execute(
+            "SELECT ps.id, ps.endpoint, ps.p256dh, ps.auth "
+            "FROM push_subscriptions ps JOIN users u ON u.id = ps.user_id "
+            "WHERE u.role = 'reseller'"
+        ).fetchall()
+        rows = [dict(r) for r in rows]
+
+    sent, stale_ids = 0, []
+    for row in rows:
+        sub = {"endpoint": row["endpoint"], "keys": {"p256dh": row["p256dh"], "auth": row["auth"]}}
+        try:
+            if _send_push_raw(vapid, claims, sub, title, body, url, icon, "broadcast"):
+                sent += 1
+        except WebPushException:
+            stale_ids.append(row["id"])      # 410 Gone — device unsubscribed
+        except Exception:
+            continue                          # network hiccup etc. — skip this device
+
+    if stale_ids:
+        with global_db(config) as db:
+            for sid in stale_ids:
+                db.execute("DELETE FROM push_subscriptions WHERE id=?", (sid,))
+    return sent
