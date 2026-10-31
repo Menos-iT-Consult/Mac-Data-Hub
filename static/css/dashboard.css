@@ -1068,3 +1068,24 @@
 }
 [data-theme="dark"] .btn-outline:hover { background: rgba(255,255,255,.14); border-color: #fff; color: #fff; }
 .btn-outline:disabled { opacity: .6; cursor: not-allowed; }
+
+
+/* ── Sidebar user footer: wrapped long names + Sign out button ── */
+.sidebar-user { flex-direction: column; align-items: stretch; gap: .75rem; }
+.sidebar-user-row { display: flex; align-items: center; gap: .7rem; min-width: 0; }
+.sidebar-user-name {
+  white-space: normal; overflow: hidden; text-overflow: ellipsis; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  line-height: 1.3;
+}
+.sidebar-signout-btn {
+  display: flex; align-items: center; justify-content: center; gap: .5rem;
+  width: 100%; padding: .6rem .9rem; border-radius: 10px;
+  font-size: .85rem; font-weight: 700; text-decoration: none; cursor: pointer;
+  color: #dc2626; background: rgba(220,38,38,.08); border: 1.5px solid rgba(220,38,38,.3);
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.sidebar-signout-btn:hover { background: #dc2626; color: #fff; border-color: #dc2626; text-decoration: none; }
+[data-theme="dark"] .sidebar-signout-btn { color: #fca5a5; background: rgba(248,113,113,.1); border-color: rgba(248,113,113,.4); }
+[data-theme="dark"] .sidebar-signout-btn:hover { background: #dc2626; color: #fff; border-color: #dc2626; }
+.sidebar-user { padding-bottom: calc(.9rem + env(safe-area-inset-bottom, 0px)); }

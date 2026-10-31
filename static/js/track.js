@@ -11,7 +11,7 @@
   var STATUS_LABELS = {
     pending:    { label: "Awaiting payment", cls: "status-pending"    },
     paid:       { label: "Processing",       cls: "status-processing" },
-    dispatched: { label: "Dispatched",       cls: "status-dispatched" },
+    dispatched: { label: "Pending",          cls: "status-dispatched" },
     processing: { label: "Processing",       cls: "status-processing" },
     completed:  { label: "Completed",        cls: "status-completed"  },
     failed:     { label: "Failed",           cls: "status-failed"     },

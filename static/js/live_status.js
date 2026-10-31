@@ -8,7 +8,7 @@
 
   var LABELS = {
     pending: "Awaiting payment", paid: "Processing", processing: "Processing",
-    dispatched: "Dispatched", completed: "Completed", failed: "Failed"
+    dispatched: "Pending", completed: "Completed", failed: "Failed"
   };
   var timer = null;
 

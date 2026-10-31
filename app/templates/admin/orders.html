@@ -29,7 +29,7 @@
         </div>
         <div class="count-pill count-pill-yellow">
           <span class="count-pill-num">{{ counts.pending }}</span>
-          <span class="count-pill-label">Pending</span>
+          <span class="count-pill-label">Awaiting</span>
         </div>
         <div class="count-pill">
           <span class="count-pill-num">{{ counts.processing }}</span>
@@ -37,7 +37,7 @@
         </div>
         <div class="count-pill">
           <span class="count-pill-num">{{ counts.dispatched }}</span>
-          <span class="count-pill-label">Dispatched</span>
+          <span class="count-pill-label">Pending</span>
         </div>
         <div class="count-pill count-pill-green">
           <span class="count-pill-num">{{ counts.completed }}</span>
@@ -70,7 +70,7 @@
           <option value="">All status</option>
           <option value="pending">Awaiting payment</option>
           <option value="processing">Processing</option>
-          <option value="dispatched">Dispatched</option>
+          <option value="dispatched">Pending</option>
           <option value="completed">Completed</option>
           <option value="failed">Failed</option>
         </select>
@@ -111,7 +111,7 @@
                 <td class="td-bold">GHS {{ '%.2f'|format(o['amount_pesewas'] / 100) }}</td>
                 <td class="td-muted">{% if o['status'] in ('dispatched', 'processing', 'completed') %}GHS {{ '%.2f'|format(o['profit_pesewas'] / 100) }}{% else %}—{% endif %}</td>
                 <td>
-                  <span class="status-pill status-{{ o['status'] }}"{% if o['gigzhub_status'] %} title="GigzHub says: {{ o['gigzhub_status'] }}"{% endif %}>{{ {'pending':'Awaiting payment','paid':'Processing','processing':'Processing','dispatched':'Dispatched','completed':'Completed','failed':'Failed'}.get(o['status'], o['status']) }}</span>
+                  <span class="status-pill status-{{ o['status'] }}"{% if o['gigzhub_status'] %} title="GigzHub says: {{ o['gigzhub_status'] }}"{% endif %}>{{ {'pending':'Awaiting payment','paid':'Processing','processing':'Processing','dispatched':'Pending','completed':'Completed','failed':'Failed'}.get(o['status'], o['status']) }}</span>
                   {% if o['gigzhub_error'] %}
                   <div class="td-muted td-sm" style="margin-top:.25rem;max-width:160px;white-space:normal;color:#ef4444" title="{{ o['gigzhub_error'] }}">{{ o['gigzhub_error'][:60] }}{% if o['gigzhub_error']|length > 60 %}…{% endif %}</div>
                   {% endif %}
@@ -176,7 +176,7 @@
       if (row) {
         row.querySelector('.status-pill').className = 'status-pill status-dispatched';
         row.dataset.status = 'dispatched';
-        row.querySelector('.status-pill').textContent = 'Dispatched';
+        row.querySelector('.status-pill').textContent = 'Pending';
         const errDiv = row.querySelector('[style*="ef4444"]');
         if (errDiv) errDiv.remove();
         btn.remove();
