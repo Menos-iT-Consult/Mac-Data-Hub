@@ -488,7 +488,14 @@ def redispatch_order(order_id):
 def sync_orders_now():
     """Ask GigzHub about every in-flight order right now (the background job does this
     automatically; this button is for impatience and for diagnosing the status path)."""
+    from ..services.fulfil import reconcile_pending
+    try:
+        rec = reconcile_pending(current_app.config, limit=40)
+    except Exception:
+        current_app.logger.exception("Pending-order reconcile failed")
+        rec = {"fulfilled": 0}
     res = sync_once(current_app.config, limit=100)
+    res["changed"] = res.get("changed", 0) + rec.get("fulfilled", 0)
     return jsonify({"ok": True, **res})
 
 

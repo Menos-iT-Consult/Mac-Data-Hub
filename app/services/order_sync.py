@@ -217,6 +217,13 @@ def start_background_sync(app):
         while True:
             try:
                 with app.app_context():
+                    # 1) catch paid orders the webhook missed (Awaiting payment -> dispatched)
+                    from .fulfil import reconcile_pending
+                    try:
+                        reconcile_pending(app.config)
+                    except Exception:
+                        log.exception("Pending-order reconcile failed")
+                    # 2) follow dispatched orders through to completed
                     sync_once(app.config)
             except Exception:
                 log.exception("Order status sync failed")

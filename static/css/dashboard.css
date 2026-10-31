@@ -1043,6 +1043,8 @@
 [data-theme="dark"] .status-dispatched { color: #c4b5fd; }
 [data-theme="dark"] .status-completed  { color: #86efac; }
 [data-theme="dark"] .status-failed     { color: #fca5a5; }
+
+
 /* ── Broadcast form (admin settings) ─────────────────────── */
 #broadcast-form textarea { width: 100%; min-height: 110px; box-sizing: border-box; }
 #broadcast-form .form-error,
@@ -1054,3 +1056,15 @@
     width: 100%; justify-content: center; padding: .85rem 1rem; font-size: .95rem;
   }
 }
+
+/* ── Outline button (was undefined → invisible in dark theme) ── */
+.btn-outline {
+  background: transparent; color: var(--text);
+  border: 1.5px solid var(--border-mid); cursor: pointer;
+}
+.btn-outline:hover { background: rgba(0,107,63,.08); border-color: var(--green); color: var(--green); }
+[data-theme="dark"] .btn-outline {
+  background: rgba(255,255,255,.06); color: #f1f5f9; border-color: rgba(255,255,255,.35);
+}
+[data-theme="dark"] .btn-outline:hover { background: rgba(255,255,255,.14); border-color: #fff; color: #fff; }
+.btn-outline:disabled { opacity: .6; cursor: not-allowed; }

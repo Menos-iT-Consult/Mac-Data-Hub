@@ -82,89 +82,10 @@ def _handle_registration(config, reference: str):
 
 
 def _handle_order(config, reference: str, metadata: dict):
-    with global_db(config) as db:
-        order = db.execute(
-            "SELECT * FROM orders WHERE paystack_reference=? AND status='pending'",
-            (reference,)
-        ).fetchone()
-        if not order:
-            return
-
-        offer_slug = _get_offer_slug(db, order["bundle_id"])
-
-        # Mark paid before hitting GigzHub so we don't re-process on webhook replay
-        db.execute("UPDATE orders SET status='paid' WHERE id=?", (order["id"],))
-
-    # Dispatch bundle via GigzHub — outside the DB context so a slow API call
-    # doesn't hold the SQLite write lock
-    gigzhub_id = ""
-    gigzhub_error = ""
-    status = "failed"
-    try:
-        result = dispatch_bundle(
-            config["GIGZHUB_API_KEY"],
-            order["network"],
-            order["customer_phone"],
-            offer_slug,
-            order["volume_mb"],
-        )
-        # GigzHub may return the order ID under various keys — try them all
-        data_obj = result.get("data") or result
-        gigzhub_id = (
-            str(data_obj.get("id", ""))
-            or str(data_obj.get("orderId", ""))
-            or str(data_obj.get("order_id", ""))
-            or str(data_obj.get("reference", ""))
-        )
-        status = "dispatched"
-    except Exception as exc:
-        gigzhub_error = str(exc)[:500]
-
-    with global_db(config) as db:
-        db.execute(
-            "UPDATE orders SET status=?, gigzhub_order_id=?, gigzhub_error=? WHERE id=?",
-            (status, gigzhub_id, gigzhub_error or None, order["id"])
-        )
-
-        # Referral bonus for whoever referred the buyer / store owner
-        if status == "dispatched":
-            try:
-                credit_referral(config, db, order)
-            except Exception:
-                pass
-
-        # Credit reseller wallet and mirror to their personal DB
-        if status == "dispatched" and order["store_id"]:
-            store = db.execute(
-                "SELECT user_id FROM stores WHERE id=?", (order["store_id"],)
-            ).fetchone()
-            if store:
-                if order["profit_pesewas"] > 0:
-                    db.execute(
-                        "UPDATE users SET wallet_pesewas = wallet_pesewas + ? WHERE id=?",
-                        (order["profit_pesewas"], store["user_id"])
-                    )
-                bundle_row = db.execute(
-                    "SELECT label FROM data_bundles WHERE id=?", (order["bundle_id"],)
-                ).fetchone()
-                label = bundle_row["label"] if bundle_row else order["network"]
-                _mirror_order_to_user_db(config, store["user_id"], order, label)
-                credit_agent_cut(config, db, order, label)
-                profit_ghs = "GHS %.2f" % (order["profit_pesewas"] / 100)
-                try:
-                    broadcast_push(config, store["user_id"],
-                                   "Order dispatched!",
-                                   f"{label} sent to {order['customer_phone']} — +{profit_ghs} profit",
-                                   "/dashboard/orders")
-                except Exception:
-                    pass
-
-        # Notify admin of every completed/failed order
-        try:
-            amt_ghs = "GHS %.2f" % (order["amount_pesewas"] / 100)
-            _notify_admins(config, status, order, amt_ghs, gigzhub_error)
-        except Exception:
-            pass
+    # Signature already verified by the caller, so no extra Paystack lookup is needed.
+    # fulfil_order claims the order atomically, so webhook replays can't double-dispatch.
+    from ..services.fulfil import fulfil_order
+    fulfil_order(config, reference, verify=False)
 
 
 def _mirror_order_to_user_db(config, user_id: str, order, bundle_label: str = ""):

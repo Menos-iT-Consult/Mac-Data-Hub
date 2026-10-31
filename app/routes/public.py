@@ -9,6 +9,7 @@ from ..services.push import broadcast_push
 from ..services.referrals import credit_referral
 from ..services.pricing_chain import resolve_store_price, sub_agent_floors
 from ..services.team import credit_agent_cut
+from ..services.fulfil import fulfil_order, fulfil_in_background
 
 public_bp = Blueprint("public", __name__)
 
@@ -306,141 +307,61 @@ def track_orders():
 
 @public_bp.route("/checkout/verify")
 def checkout_verify():
-    ref = request.args.get("ref", "")
+    ref = (request.args.get("ref", "") or "").strip()
+    # The customer just came back from Paystack: confirm + dispatch right now in the
+    # background (the webhook usually beats us to it; the atomic claim makes that harmless).
+    if ref and len(ref) <= 40:
+        fulfil_in_background(current_app._get_current_object(), ref)
     return render_template("public/checkout_verify.html", reference=ref)
 
 
 @public_bp.route("/verify-payment", methods=["POST"])
 def verify_payment():
+    """Manual fallback: paste a Paystack reference to confirm + (re)dispatch an order."""
     config = current_app.config
     data = request.get_json() or {}
     reference = data.get("reference", "").strip().upper()
-    phone = data.get("phone", "").strip()
 
     if not reference:
         return jsonify({"ok": False, "error": "Paystack reference is required."}), 400
 
-    with global_db_read(config) as db:
-        order = db.execute(
-            """SELECT o.*, b.offer_slug, b.label as bundle_label
-               FROM orders o
-               LEFT JOIN data_bundles b ON b.id = o.bundle_id
-               WHERE o.paystack_reference=?""",
-            (reference,)
-        ).fetchone()
+    out = fulfil_order(config, reference, verify=True, retry_failed=True)
+    state = out["state"]
+    order = out.get("order") or {}
+    label = order.get("bundle_label") or (order.get("network") or "").upper()
+    base = {"network": order.get("network"), "label": order.get("bundle_label"),
+            "phone": order.get("customer_phone")}
 
-        if not order:
-            return jsonify({"ok": False, "error": "Reference not found. Check the reference in your payment email and try again."}), 404
+    if state == "not_found":
+        return jsonify({"ok": False, "error": "Reference not found. Check the reference in your payment email and try again."}), 404
 
-        # Already delivered — just confirm
-        if order["status"] == "dispatched":
-            return jsonify({
-                "ok": True,
-                "already_done": True,
-                "message": f"Your {order['bundle_label'] or order['network'].upper()} data was successfully delivered to {order['customer_phone']}.",
-                "network": order["network"],
-                "label": order["bundle_label"],
-                "phone": order["customer_phone"],
-            })
+    if state == "error":
+        return jsonify({"ok": False, "error": f"Could not reach Paystack to verify payment: {out.get('error')}"}), 502
 
-        # Webhook already picked this up and is processing — don't double-dispatch
-        if order["status"] == "paid":
-            return jsonify({
-                "ok": True,
-                "already_done": True,
-                "message": f"Your payment is confirmed and your {order['bundle_label'] or order['network'].upper()} data is being processed. It will arrive shortly.",
-                "network": order["network"],
-                "label": order["bundle_label"],
-                "phone": order["customer_phone"],
-            })
-
-        # Save values we need after closing the DB context
-        offer_slug = order["offer_slug"] or ""
-        order_dict = dict(order)
-
-    # Check Paystack to confirm the payment is real
-    try:
-        ps_result = verify_transaction(config["PAYSTACK_SECRET_KEY"], reference)
-        ps_data = ps_result.get("data", {})
-        ps_status = ps_data.get("status", "")
-    except Exception as exc:
-        return jsonify({"ok": False, "error": f"Could not reach Paystack to verify payment: {exc}"}), 502
-
-    if ps_status != "success":
+    if state == "unpaid":
         return jsonify({
             "ok": False,
-            "error": f"Your payment has not been confirmed by Paystack (status: {ps_status}). If you were charged, please contact support with reference {reference}.",
+            "error": f"Your payment has not been confirmed by Paystack (status: {out.get('paystack_status')}). If you were charged, please contact support with reference {reference}.",
         })
 
-    # Payment is confirmed — dispatch now
-    gigzhub_id = ""
-    gigzhub_error = ""
-    status = "failed"
-    try:
-        result = dispatch_bundle(
-            config["GIGZHUB_API_KEY"],
-            order_dict["network"],
-            order_dict["customer_phone"],
-            offer_slug,
-            order_dict["volume_mb"],
-        )
-        data_obj = result.get("data") or result
-        gigzhub_id = (
-            str(data_obj.get("id", ""))
-            or str(data_obj.get("orderId", ""))
-            or str(data_obj.get("order_id", ""))
-            or str(data_obj.get("reference", ""))
-        )
-        status = "dispatched"
-    except Exception as exc:
-        gigzhub_error = str(exc)[:500]
+    if state == "already":
+        st = order.get("status")
+        if st in ("dispatched", "completed"):
+            msg = f"Your {label} data was successfully delivered to {order['customer_phone']}."
+        else:  # paid / processing — someone else is already handling it
+            msg = f"Your payment is confirmed and your {label} data is being processed. It will arrive shortly."
+        return jsonify({"ok": True, "already_done": True, "message": msg, **base})
 
-    with global_db(config) as db:
-        db.execute(
-            "UPDATE orders SET status=?, gigzhub_order_id=?, gigzhub_error=? WHERE id=?",
-            (status, gigzhub_id, gigzhub_error or None, order_dict["id"])
-        )
-
-        if status == "dispatched":
-            try:
-                credit_referral(config, db, order_dict)
-            except Exception:
-                pass
-
-        if status == "dispatched" and order_dict["store_id"]:
-            store = db.execute(
-                "SELECT user_id FROM stores WHERE id=?", (order_dict["store_id"],)
-            ).fetchone()
-            if store:
-                if order_dict["profit_pesewas"] > 0:
-                    db.execute(
-                        "UPDATE users SET wallet_pesewas = wallet_pesewas + ? WHERE id=?",
-                        (order_dict["profit_pesewas"], store["user_id"])
-                    )
-                label = order_dict["bundle_label"] or order_dict["network"]
-                _mirror_order(config, store["user_id"], order_dict, label)
-                credit_agent_cut(config, db, order_dict, label)
-                try:
-                    broadcast_push(config, store["user_id"],
-                                   "Order dispatched!",
-                                   f"{label} sent to {order_dict['customer_phone']}",
-                                   "/dashboard/orders")
-                except Exception:
-                    pass
-
-    if status == "dispatched":
+    if state == "dispatched":
         return jsonify({
-            "ok": True,
-            "already_done": False,
-            "message": f"Your payment is confirmed and {order_dict['bundle_label'] or order_dict['network'].upper()} data is being sent to {order_dict['customer_phone']}.",
-            "network": order_dict["network"],
-            "label": order_dict["bundle_label"],
-            "phone": order_dict["customer_phone"],
+            "ok": True, "already_done": False,
+            "message": f"Your payment is confirmed and {label} data is being sent to {order['customer_phone']}.",
+            **base,
         })
 
     return jsonify({
         "ok": False,
-        "error": f"Your payment is confirmed but data delivery failed: {gigzhub_error}. Please contact support with reference {reference}.",
+        "error": f"Your payment is confirmed but data delivery failed: {out.get('error')}. Please contact support with reference {reference}.",
     })
 
 
