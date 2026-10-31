@@ -90,11 +90,15 @@
     const closeBtn = document.getElementById('sidebar-close');
     const toggler  = document.getElementById('sidebar-toggle');
 
-    function openSidebar()  { sidebar?.classList.add('open');    overlay?.classList.remove('hidden'); }
-    function closeSidebar() { sidebar?.classList.remove('open'); overlay?.classList.add('hidden'); }
+    function openSidebar()  { sidebar?.classList.add('open');    overlay?.classList.remove('hidden'); document.documentElement.classList.add('sidebar-open'); }
+    function closeSidebar() { sidebar?.classList.remove('open'); overlay?.classList.add('hidden');    document.documentElement.classList.remove('sidebar-open'); }
 
     toggler?.addEventListener('click', openSidebar);
     closeBtn?.addEventListener('click', closeSidebar);
     overlay?.addEventListener('click', closeSidebar);
+    // Stop the page behind the menu from scrolling/dragging while the menu is open
+    overlay?.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSidebar(); });
+    window.addEventListener('resize', function () { if (window.innerWidth > 768) closeSidebar(); });
   });
 </script>

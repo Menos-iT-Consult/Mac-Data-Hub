@@ -1089,3 +1089,11 @@
 [data-theme="dark"] .sidebar-signout-btn { color: #fca5a5; background: rgba(248,113,113,.1); border-color: rgba(248,113,113,.4); }
 [data-theme="dark"] .sidebar-signout-btn:hover { background: #dc2626; color: #fff; border-color: #dc2626; }
 .sidebar-user { padding-bottom: calc(.9rem + env(safe-area-inset-bottom, 0px)); }
+
+/* ── Mobile menu: scroll inside the menu only, never the page behind ── */
+.dash-sidebar { height: 100vh; height: 100dvh; max-height: 100dvh; overscroll-behavior: contain; }
+.sidebar-brand, .sidebar-user { flex-shrink: 0; }
+.sidebar-nav { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.sidebar-overlay { touch-action: none; overscroll-behavior: contain; }
+html.sidebar-open, html.sidebar-open body { overflow: hidden; overscroll-behavior: none; }
+@media (min-width: 769px) { html.sidebar-open, html.sidebar-open body { overflow: visible; } }
